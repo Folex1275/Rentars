@@ -12,7 +12,16 @@ pub struct Property {
     pub owner: Address,
     pub title: String,
     pub price_per_night: i128, // in USDC stroops
-    pub available: bool,
+    pub status: PropertyStatus,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub enum PropertyStatus {
+    Available,
+    Booked,
+    Maintenance,
+    Inactive,
 }
 
 #[contracttype]
@@ -41,7 +50,7 @@ pub struct RentarsContract;
 #[contractimpl]
 impl RentarsContract {
     /// List a new property on-chain
-    pub fn list_property(
+    pub fn create_listing(
         env: Env,
         owner: Address,
         title: String,
@@ -49,20 +58,55 @@ impl RentarsContract {
     ) -> u64 {
         owner.require_auth();
 
-        let count: u64 = env.storage().instance().get(&DataKey::PropertyCount).unwrap_or(0);
+        let count: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::PropertyCount)
+            .unwrap_or(0);
         let id = count + 1;
+
+        assert!(
+            !env.storage().persistent().has(&DataKey::Property(id)),
+            "Property already exists"
+        );
 
         let property = Property {
             id,
             owner,
             title,
             price_per_night,
-            available: true,
+            status: PropertyStatus::Available,
         };
 
-        env.storage().instance().set(&DataKey::Property(id), &property);
-        env.storage().instance().set(&DataKey::PropertyCount, &id);
+        env.storage().persistent().set(&DataKey::Property(id), &property);
+        env.storage().persistent().set(&DataKey::PropertyCount, &id);
         id
+    }
+
+    /// Backward-compatible alias for older callers.
+    pub fn list_property(
+        env: Env,
+        owner: Address,
+        title: String,
+        price_per_night: i128,
+    ) -> u64 {
+        Self::create_listing(env, owner, title, price_per_night)
+    }
+
+    /// Update a property status; only the owner may change it.
+    pub fn update_status(env: Env, id: u64, owner: Address, new_status: PropertyStatus) {
+        owner.require_auth();
+
+        let mut property: Property = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Property(id))
+            .expect("Property not found");
+
+        assert!(property.owner == owner, "Only the property owner can update status");
+
+        property.status = new_status;
+        env.storage().persistent().set(&DataKey::Property(id), &property);
     }
 
     /// Create a booking and lock USDC in escrow
@@ -77,16 +121,23 @@ impl RentarsContract {
 
         let mut property: Property = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Property(property_id))
             .expect("Property not found");
 
-        assert!(property.available, "Property not available");
+        assert!(
+            matches!(property.status, PropertyStatus::Available),
+            "Property not available"
+        );
 
         let nights = check_out - check_in;
         let total_amount = property.price_per_night * nights as i128;
 
-        let count: u64 = env.storage().instance().get(&DataKey::BookingCount).unwrap_or(0);
+        let count: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::BookingCount)
+            .unwrap_or(0);
         let id = count + 1;
 
         let booking = Booking {
@@ -99,10 +150,10 @@ impl RentarsContract {
             confirmed: false,
         };
 
-        property.available = false;
-        env.storage().instance().set(&DataKey::Property(property_id), &property);
-        env.storage().instance().set(&DataKey::Booking(id), &booking);
-        env.storage().instance().set(&DataKey::BookingCount, &id);
+        property.status = PropertyStatus::Booked;
+        env.storage().persistent().set(&DataKey::Property(property_id), &property);
+        env.storage().persistent().set(&DataKey::Booking(id), &booking);
+        env.storage().persistent().set(&DataKey::BookingCount, &id);
         id
     }
 
@@ -112,19 +163,29 @@ impl RentarsContract {
 
         let mut booking: Booking = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(booking_id))
             .expect("Booking not found");
 
         assert!(!booking.confirmed, "Already confirmed");
         booking.confirmed = true;
-        env.storage().instance().set(&DataKey::Booking(booking_id), &booking);
+
+        let mut property: Property = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Property(booking.property_id))
+            .expect("Property not found");
+
+        property.status = PropertyStatus::Available;
+
+        env.storage().persistent().set(&DataKey::Booking(booking_id), &booking);
+        env.storage().persistent().set(&DataKey::Property(booking.property_id), &property);
     }
 
     /// Get property details
     pub fn get_property(env: Env, id: u64) -> Property {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Property(id))
             .expect("Property not found")
     }
@@ -132,7 +193,7 @@ impl RentarsContract {
     /// Get booking details
     pub fn get_booking(env: Env, id: u64) -> Booking {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(id))
             .expect("Booking not found")
     }
