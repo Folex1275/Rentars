@@ -3,10 +3,35 @@
 //! Allows tenants to submit on-chain reviews for users (owners/properties).
 //! Enforces: rating 1–5, one review per reviewer per subject, unique IDs,
 //! and per-subject review indexes.
+//!
+//! ## Storage TTL Strategy
+//!
+//! All persistent storage entries use TTL (time-to-live) extensions to prevent
+//! ledger entry expiry on Stellar's state-expiration model:
+//!
+//! - **TTL_MIN** (100 ledgers): Minimum remaining TTL before an extension fires.
+//! - **TTL_EXTEND_TO** (100 ledgers): Target TTL applied on every write.
+//!
+//! Every write to persistent storage is immediately followed by `extend_ttl`.
+//! This applies to:
+//!   - Individual `Review(id)` entries (on submit)
+//!   - `ReviewCount` counter (on every increment)
+//!   - `UserReviews(reviewee)` index (on every append)
+//!   - `HasReviewed(reviewer, reviewee)` duplicate-prevention flag (on set)
+//!
+//! For production, TTL_EXTEND_TO should be tuned to the platform's activity
+//! cadence (e.g., 17,280 ledgers ≈ 1 day at 5 s/ledger).
 
 #![no_std]
 
 use soroban_sdk::{contract, contractimpl, contracttype, vec, Address, Env, String, Vec};
+
+// ─── TTL Constants ────────────────────────────────────────────────────────────
+
+/// Minimum TTL threshold before an extension is triggered (in ledgers).
+const TTL_MIN: u32 = 100;
+/// Target TTL to extend entries to on every write (in ledgers).
+const TTL_EXTEND_TO: u32 = 100;
 
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
@@ -70,7 +95,7 @@ impl ReviewContract {
         // ── Duplicate prevention ──────────────────────────────────────────
         let already_reviewed: bool = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::HasReviewed(reviewer.clone(), reviewee.clone()))
             .unwrap_or(false);
         assert!(!already_reviewed, "Reviewer has already reviewed this user");
@@ -78,7 +103,7 @@ impl ReviewContract {
         // ── Persist ───────────────────────────────────────────────────────
         let count: u64 = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::ReviewCount)
             .unwrap_or(0);
         let id = count + 1;
@@ -93,27 +118,44 @@ impl ReviewContract {
         };
 
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Review(id), &review);
         env.storage()
-            .instance()
+            .persistent()
+            .extend_ttl(&DataKey::Review(id), TTL_MIN, TTL_EXTEND_TO);
+
+        env.storage()
+            .persistent()
             .set(&DataKey::ReviewCount, &id);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::ReviewCount, TTL_MIN, TTL_EXTEND_TO);
 
         // Mark duplicate-prevention flag
         env.storage()
-            .instance()
-            .set(&DataKey::HasReviewed(reviewer, reviewee.clone()), &true);
+            .persistent()
+            .set(&DataKey::HasReviewed(reviewer.clone(), reviewee.clone()), &true);
+        env.storage()
+            .persistent()
+            .extend_ttl(
+                &DataKey::HasReviewed(reviewer, reviewee.clone()),
+                TTL_MIN,
+                TTL_EXTEND_TO,
+            );
 
         // Append to per-reviewee index
         let mut user_reviews: Vec<u64> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::UserReviews(reviewee.clone()))
             .unwrap_or(vec![&env]);
         user_reviews.push_back(id);
         env.storage()
-            .instance()
-            .set(&DataKey::UserReviews(reviewee), &user_reviews);
+            .persistent()
+            .set(&DataKey::UserReviews(reviewee.clone()), &user_reviews);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::UserReviews(reviewee), TTL_MIN, TTL_EXTEND_TO);
 
         id
     }
@@ -121,7 +163,7 @@ impl ReviewContract {
     /// Retrieve a review by its global ID.
     pub fn get_review(env: Env, id: u64) -> Review {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Review(id))
             .expect("Review not found")
     }
@@ -129,7 +171,7 @@ impl ReviewContract {
     /// Return all review IDs submitted for a given reviewee.
     pub fn get_reviews_for_user(env: Env, reviewee: Address) -> Vec<u64> {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::UserReviews(reviewee))
             .unwrap_or(vec![&env])
     }
@@ -139,7 +181,7 @@ impl ReviewContract {
     pub fn get_reputation(env: Env, reviewee: Address) -> u32 {
         let ids: Vec<u64> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::UserReviews(reviewee.clone()))
             .unwrap_or(vec![&env]);
 
@@ -152,7 +194,7 @@ impl ReviewContract {
             let rid = ids.get(i).unwrap();
             let review: Review = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::Review(rid))
                 .unwrap();
             total += review.rating;
@@ -165,7 +207,7 @@ impl ReviewContract {
     /// Return the total number of reviews ever submitted.
     pub fn review_count(env: Env) -> u64 {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::ReviewCount)
             .unwrap_or(0)
     }

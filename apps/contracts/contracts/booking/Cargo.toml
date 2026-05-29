@@ -8,9 +8,14 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { version = "21.0.0", features = ["alloc"] }
+property-listing = { path = "../property-listing" }
 
 [dev-dependencies]
 soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+property-listing = { path = "../property-listing", features = ["testutils"] }
+
+[features]
+testutils = ["soroban-sdk/testutils", "property-listing/testutils"]
 
 [profile.release]
 opt-level = "z"

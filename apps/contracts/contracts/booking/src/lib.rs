@@ -2,10 +2,49 @@
 //!
 //! Manages rental bookings with overlap prevention, status transitions,
 //! escrow ID tracking, and per-property booking indexes.
+//!
+//! ## Cross-Contract Integration
+//!
+//! `create_booking` performs two cross-contract calls against the
+//! `property-listing` contract (whose address is stored at initialization):
+//!
+//! 1. **Verify availability** — calls `get_listing(property_id)` and asserts
+//!    the returned status is `ListingStatus::Active`. Bookings on inactive or
+//!    already-rented properties are rejected.
+//! 2. **Mark as rented** — after persisting the booking, calls `set_rented(id)`
+//!    on the property-listing contract to atomically flip the property status to
+//!    `Rented`, preventing double-bookings across contract boundaries.
+//!
+//! ## Storage TTL Strategy
+//!
+//! All persistent storage entries use TTL (time-to-live) extensions to prevent
+//! ledger entry expiry on Stellar's state-expiration model:
+//!
+//! - **TTL_MIN** (100 ledgers): Minimum remaining TTL before an extension fires.
+//! - **TTL_EXTEND_TO** (100 ledgers): Target TTL applied on every write.
+//!
+//! Every write to persistent storage is immediately followed by `extend_ttl`.
+//! This applies to:
+//!   - Individual `Booking(id)` entries (on create and every status change)
+//!   - `BookingCount` counter (on every increment)
+//!   - `PropertyBookings(property_id)` index (on every append)
+//!
+//! For production, TTL_EXTEND_TO should be tuned to the platform's activity
+//! cadence (e.g., 17,280 ledgers ≈ 1 day at 5 s/ledger).
 
 #![no_std]
 
 use soroban_sdk::{contract, contractimpl, contracttype, vec, Address, Env, String, Vec};
+
+// Import the property-listing contract's client and types for cross-contract calls.
+use property_listing::{ListingStatus, PropertyListingContractClient};
+
+// ─── TTL Constants ────────────────────────────────────────────────────────────
+
+/// Minimum TTL threshold before an extension is triggered (in ledgers).
+const TTL_MIN: u32 = 100;
+/// Target TTL to extend entries to on every write (in ledgers).
+const TTL_EXTEND_TO: u32 = 100;
 
 // ─── Data Types ──────────────────────────────────────────────────────────────
 
@@ -40,6 +79,8 @@ pub enum DataKey {
     Initialized,
     /// Admin address
     Admin,
+    /// Address of the property-listing contract (set at initialization)
+    PropertyListingContractId,
     /// Individual booking by ID
     Booking(u64),
     /// Total bookings ever created
@@ -57,10 +98,11 @@ pub struct BookingContract;
 impl BookingContract {
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
-    /// Initialize the contract with an admin address.
+    /// Initialize the contract with an admin address and the address of the
+    /// deployed property-listing contract.
     ///
     /// Must be called exactly once. Panics if already initialized.
-    pub fn initialize(env: Env, admin: Address) {
+    pub fn initialize(env: Env, admin: Address, property_listing_contract_id: Address) {
         admin.require_auth();
 
         assert!(
@@ -76,6 +118,9 @@ impl BookingContract {
         env.storage()
             .instance()
             .set(&DataKey::Admin, &admin);
+        env.storage()
+            .instance()
+            .set(&DataKey::PropertyListingContractId, &property_listing_contract_id);
     }
 
     // ── Bookings ─────────────────────────────────────────────────────────────
@@ -85,7 +130,11 @@ impl BookingContract {
     /// Validates:
     /// - check_in < check_out
     /// - total_price > 0
+    /// - Property exists in the property-listing contract and has `Active` status
     /// - No overlapping booking exists for the same property
+    ///
+    /// After persisting the booking, calls `set_rented` on the property-listing
+    /// contract to mark the property as `Rented`.
     ///
     /// Returns the new booking ID.
     pub fn create_booking(
@@ -102,10 +151,25 @@ impl BookingContract {
         assert!(check_in < check_out, "check_in must be before check_out");
         assert!(total_price > 0, "total_price must be positive");
 
+        // ── Cross-contract: verify property exists and is Active ──────────
+        let listing_contract_id: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::PropertyListingContractId)
+            .expect("Contract not initialized");
+
+        let listing_client = PropertyListingContractClient::new(&env, &listing_contract_id);
+        let listing = listing_client.get_listing(&property_id);
+
+        assert!(
+            listing.status == ListingStatus::Active,
+            "Property is not available for booking"
+        );
+
         // ── Overlap prevention ────────────────────────────────────────────
         let property_bookings: Vec<u64> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PropertyBookings(property_id))
             .unwrap_or(vec![&env]);
 
@@ -113,7 +177,7 @@ impl BookingContract {
             let bid = property_bookings.get(i).unwrap();
             let existing: Booking = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::Booking(bid))
                 .unwrap();
 
@@ -122,17 +186,16 @@ impl BookingContract {
                 continue;
             }
 
-            // Overlap: new interval intersects existing interval
             // Overlap iff NOT (check_out <= existing.check_in OR check_in >= existing.check_out)
             let overlaps =
                 !(check_out <= existing.check_in || check_in >= existing.check_out);
             assert!(!overlaps, "Booking dates overlap with an existing booking");
         }
 
-        // ── Persist ───────────────────────────────────────────────────────
+        // ── Persist booking ───────────────────────────────────────────────
         let count: u64 = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::BookingCount)
             .unwrap_or(0);
         let id = count + 1;
@@ -149,18 +212,31 @@ impl BookingContract {
         };
 
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Booking(id), &booking);
         env.storage()
-            .instance()
+            .persistent()
+            .extend_ttl(&DataKey::Booking(id), TTL_MIN, TTL_EXTEND_TO);
+
+        env.storage()
+            .persistent()
             .set(&DataKey::BookingCount, &id);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::BookingCount, TTL_MIN, TTL_EXTEND_TO);
 
         // Append to property index
         let mut bookings = property_bookings;
         bookings.push_back(id);
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::PropertyBookings(property_id), &bookings);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::PropertyBookings(property_id), TTL_MIN, TTL_EXTEND_TO);
+
+        // ── Cross-contract: mark property as Rented ───────────────────────
+        listing_client.set_rented(&property_id);
 
         id
     }
@@ -174,7 +250,7 @@ impl BookingContract {
 
         let mut booking: Booking = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(booking_id))
             .expect("Booking not found");
 
@@ -190,8 +266,11 @@ impl BookingContract {
 
         booking.status = BookingStatus::Cancelled;
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Booking(booking_id), &booking);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Booking(booking_id), TTL_MIN, TTL_EXTEND_TO);
     }
 
     /// Update the status of a booking.
@@ -221,7 +300,7 @@ impl BookingContract {
 
         let mut booking: Booking = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(booking_id))
             .expect("Booking not found");
 
@@ -237,8 +316,11 @@ impl BookingContract {
 
         booking.status = new_status;
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Booking(booking_id), &booking);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Booking(booking_id), TTL_MIN, TTL_EXTEND_TO);
     }
 
     /// Attach an off-chain escrow reference to a booking.
@@ -261,14 +343,17 @@ impl BookingContract {
 
         let mut booking: Booking = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(booking_id))
             .expect("Booking not found");
 
         booking.escrow_id = escrow_id;
         env.storage()
-            .instance()
+            .persistent()
             .set(&DataKey::Booking(booking_id), &booking);
+        env.storage()
+            .persistent()
+            .extend_ttl(&DataKey::Booking(booking_id), TTL_MIN, TTL_EXTEND_TO);
     }
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -276,7 +361,7 @@ impl BookingContract {
     /// Retrieve a booking by ID.
     pub fn get_booking(env: Env, id: u64) -> Booking {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::Booking(id))
             .expect("Booking not found")
     }
@@ -284,7 +369,7 @@ impl BookingContract {
     /// Return all booking IDs for a given property.
     pub fn get_property_bookings(env: Env, property_id: u64) -> Vec<u64> {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PropertyBookings(property_id))
             .unwrap_or(vec![&env])
     }
@@ -298,7 +383,7 @@ impl BookingContract {
     ) -> bool {
         let property_bookings: Vec<u64> = env
             .storage()
-            .instance()
+            .persistent()
             .get(&DataKey::PropertyBookings(property_id))
             .unwrap_or(vec![&env]);
 
@@ -306,7 +391,7 @@ impl BookingContract {
             let bid = property_bookings.get(i).unwrap();
             let existing: Booking = env
                 .storage()
-                .instance()
+                .persistent()
                 .get(&DataKey::Booking(bid))
                 .unwrap();
 
@@ -326,7 +411,7 @@ impl BookingContract {
     /// Return the total number of bookings ever created.
     pub fn booking_count(env: Env) -> u64 {
         env.storage()
-            .instance()
+            .persistent()
             .get(&DataKey::BookingCount)
             .unwrap_or(0)
     }
