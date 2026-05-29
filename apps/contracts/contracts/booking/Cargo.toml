@@ -1,18 +1,10 @@
-[workspace]
-members = [
-    ".",
-    "contracts/property-listing",
-    "contracts/booking",
-]
-resolver = "2"
-
 [package]
-name = "rentars-contracts"
+name = "booking"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { version = "21.0.0", features = ["alloc"] }
