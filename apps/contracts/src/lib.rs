@@ -8,7 +8,7 @@
 //      Re-calling will panic with "Already initialized".
 
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -16,12 +16,21 @@ use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Ve
 
 #[contracttype]
 #[derive(Clone)]
-pub struct Property {
+pub struct PropertyListing {
     pub id: u64,
     pub owner: Address,
-    pub title: String,
+    pub data_hash: String,
     pub price_per_night: i128, // in USDC stroops
-    pub available: bool,
+    pub status: PropertyStatus,
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub enum PropertyStatus {
+    Available,
+    Booked,
+    Maintenance,
+    Inactive,
 }
 
 #[contracttype]
@@ -46,14 +55,7 @@ pub enum DataKey {
     Property(u64),
     /// Stores a single Booking struct
     Booking(u64),
-    /// Running counter for property IDs
-    PropCount,
-    /// Running counter for booking IDs
-    BookCount,
-    /// Vec<u64> of booking IDs for a given property_id — enables O(n) overlap scan
-    PropertyBookings(u64),
-    /// Sentinel key used to guard against re-initialization
-    Initialized,
+    BookingCount,
 }
 
 // ---------------------------------------------------------------------------
@@ -65,97 +67,86 @@ pub struct RentarsContract;
 
 #[contractimpl]
 impl RentarsContract {
-    // -----------------------------------------------------------------------
-    // Initialization
-    // -----------------------------------------------------------------------
-
-    /// Must be called exactly once after deployment to set up storage counters.
+    /// Create a new property listing on-chain.
     ///
-    /// Panics with "Already initialized" if called more than once.
-    pub fn initialize(env: Env) {
-        if env
-            .storage()
-            .persistent()
-            .has(&DataKey::Initialized)
-        {
-            panic!("Already initialized");
-        }
-
-        env.storage().persistent().set(&DataKey::PropCount, &0u64);
-        env.storage().persistent().set(&DataKey::BookCount, &0u64);
-        env.storage().persistent().set(&DataKey::Initialized, &true);
-    }
-
-    // -----------------------------------------------------------------------
-    // Availability check
-    // -----------------------------------------------------------------------
-
-    /// Returns `true` if the requested date range does not overlap any existing
-    /// confirmed or pending booking for `property_id`.
-    ///
-    /// Two ranges [a, b) and [c, d) overlap when a < d && c < b.
-    pub fn check_availability(
+    /// `data_hash` is the SHA-256 hash (hex-encoded) of the off-chain property
+    /// JSON stored in Supabase. The hash is the only integrity anchor on-chain;
+    /// titles, descriptions, photos, etc. live off-chain.
+    pub fn create_listing(
         env: Env,
-        property_id: u64,
-        start_date: u64,
-        end_date: u64,
-    ) -> bool {
-        let booking_ids: Vec<u64> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::PropertyBookings(property_id))
-            .unwrap_or(Vec::new(&env));
+        id: u64,
+        data_hash: String,
+        owner: Address,
+        price_per_night: i128,
+    ) {
+        owner.require_auth();
 
-        for i in 0..booking_ids.len() {
-            let bid = booking_ids.get(i).unwrap();
-            let booking: Booking = env
-                .storage()
-                .persistent()
-                .get(&DataKey::Booking(bid))
-                .expect("Booking record missing");
+        assert!(
+            !env.storage().instance().has(&DataKey::Property(id)),
+            "Listing already exists"
+        );
 
-            // Overlap condition: existing.check_in < end_date && start_date < existing.check_out
-            if booking.check_in < end_date && start_date < booking.check_out {
-                return false;
-            }
-        }
-        true
+        let listing = PropertyListing {
+            id,
+            owner,
+            data_hash,
+            price_per_night,
+            status: PropertyStatus::Available,
+        };
+
+        env.storage().instance().set(&DataKey::Property(id), &listing);
     }
 
-    // -----------------------------------------------------------------------
-    // Property listing
-    // -----------------------------------------------------------------------
+    /// Update the `data_hash` of an existing listing. Only the recorded `owner`
+    /// can update; the supplied `owner` must match the on-chain owner and must
+    /// authorise the transaction.
+    pub fn update_listing(env: Env, id: u64, data_hash: String, owner: Address) {
+        owner.require_auth();
 
-    /// List a new property on-chain.
-    ///
-    /// Requires `initialize` to have been called first.
+        let mut listing: PropertyListing = env
+            .storage()
+            .instance()
+            .get(&DataKey::Property(id))
+            .expect("Listing not found");
+
+        assert!(listing.owner == owner, "Unauthorized: caller is not the listing owner");
+
+        listing.data_hash = data_hash;
+        env.storage().instance().set(&DataKey::Property(id), &listing);
+    }
+
+    /// Return the full on-chain `PropertyListing` for `id`.
+    pub fn get_listing(env: Env, id: u64) -> PropertyListing {
+        env.storage()
+            .instance()
+            .get(&DataKey::Property(id))
+            .expect("Listing not found")
+    }
+
+    /// Backward-compatible alias for older callers.
     pub fn list_property(
         env: Env,
         owner: Address,
         title: String,
         price_per_night: i128,
     ) -> u64 {
+        Self::create_listing(env, owner, title, price_per_night)
+    }
+
+    /// Update a property status; only the owner may change it.
+    pub fn update_status(env: Env, id: u64, owner: Address, new_status: PropertyStatus) {
         owner.require_auth();
 
-        let count: u64 = env
+        let mut property: Property = env
             .storage()
             .persistent()
-            .get(&DataKey::PropCount)
-            .expect("Contract not initialized — call initialize() first");
+            .get(&DataKey::Property(id))
+            .expect("Property not found");
 
-        let id = count + 1;
+        assert!(property.owner == owner, "Only the property owner can update status");
 
-        let property = Property {
-            id,
-            owner,
-            title,
-            price_per_night,
-            available: true,
-        };
-
+        property.status = new_status;
         env.storage().persistent().set(&DataKey::Property(id), &property);
-        env.storage().persistent().set(&DataKey::PropCount, &id);
-        id
     }
 
     // -----------------------------------------------------------------------
@@ -181,44 +172,22 @@ impl RentarsContract {
     ) -> u64 {
         tenant.require_auth();
 
-        // --- Guard: contract must be initialized ---
-        if !env.storage().persistent().has(&DataKey::Initialized) {
-            panic!("Contract not initialized — call initialize() first");
-        }
-
-        // --- Validate property exists ---
-        let property: Property = env
+        let mut listing: PropertyListing = env
             .storage()
             .persistent()
             .get(&DataKey::Property(property_id))
-            .expect("Property not found");
+            .expect("Listing not found");
 
-        // --- Date validations ---
-        let now = env.ledger().timestamp();
-        if start_date < now {
-            panic!("start_date must be >= current ledger timestamp");
-        }
-        if start_date >= end_date {
-            panic!("start_date must be strictly less than end_date");
-        }
+        assert!(listing.available, "Property not available");
 
-        // --- Price validation ---
-        if total_price <= 0 {
-            panic!("total_price must be greater than 0");
-        }
+        let nights = check_out - check_in;
+        let total_amount = listing.price_per_night * nights as i128;
 
-        // --- Availability check ---
-        if !Self::check_availability(env.clone(), property_id, start_date, end_date) {
-            panic!("Booking overlap: dates conflict with existing reservation");
-        }
-
-        // --- Persist booking ---
         let count: u64 = env
             .storage()
             .persistent()
-            .get(&DataKey::BookCount)
-            .expect("Contract not initialized — call initialize() first");
-
+            .get(&DataKey::BookingCount)
+            .unwrap_or(0);
         let id = count + 1;
 
         let booking = Booking {
@@ -231,20 +200,10 @@ impl RentarsContract {
             confirmed: false,
         };
 
-        env.storage().persistent().set(&DataKey::Booking(id), &booking);
-        env.storage().persistent().set(&DataKey::BookCount, &id);
-
-        // --- Index booking under its property for future overlap scans ---
-        let mut property_bookings: Vec<u64> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::PropertyBookings(property_id))
-            .unwrap_or(Vec::new(&env));
-        property_bookings.push_back(id);
-        env.storage()
-            .persistent()
-            .set(&DataKey::PropertyBookings(property_id), &property_bookings);
-
+        listing.available = false;
+        env.storage().instance().set(&DataKey::Property(property_id), &listing);
+        env.storage().instance().set(&DataKey::Booking(id), &booking);
+        env.storage().instance().set(&DataKey::BookingCount, &id);
         id
     }
 
@@ -264,21 +223,17 @@ impl RentarsContract {
 
         assert!(!booking.confirmed, "Already confirmed");
         booking.confirmed = true;
-        env.storage()
-            .persistent()
-            .set(&DataKey::Booking(booking_id), &booking);
-    }
 
-    // -----------------------------------------------------------------------
-    // Read helpers
-    // -----------------------------------------------------------------------
-
-    /// Get property details by ID.
-    pub fn get_property(env: Env, id: u64) -> Property {
-        env.storage()
+        let mut property: Property = env
+            .storage()
             .persistent()
-            .get(&DataKey::Property(id))
-            .expect("Property not found")
+            .get(&DataKey::Property(booking.property_id))
+            .expect("Property not found");
+
+        property.status = PropertyStatus::Available;
+
+        env.storage().persistent().set(&DataKey::Booking(booking_id), &booking);
+        env.storage().persistent().set(&DataKey::Property(booking.property_id), &property);
     }
 
     /// Get booking details by ID.
