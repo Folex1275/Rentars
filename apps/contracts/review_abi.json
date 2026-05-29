@@ -1,0 +1,142 @@
+{
+  "contract_name": "review-contract",
+  "version": "0.1.0",
+  "description": "Review contract for Rentars — allows tenants to submit on-chain reviews for users (owners/properties). Enforces rating 1–5, one review per reviewer per subject, unique IDs, and per-subject review indexes.",
+  "functions": [
+    {
+      "name": "submit_review",
+      "description": "Submit a review for a reviewee. Validates rating is 1–5 and that the reviewer has not already reviewed this reviewee. Returns the new review ID.",
+      "inputs": [
+        {
+          "name": "reviewer",
+          "type": "Address",
+          "description": "The Stellar address submitting the review. Must authorize the call."
+        },
+        {
+          "name": "reviewee",
+          "type": "Address",
+          "description": "The Stellar address being reviewed (owner or property representative)."
+        },
+        {
+          "name": "rating",
+          "type": "u32",
+          "description": "Rating value. Must be between 1 and 5 inclusive."
+        },
+        {
+          "name": "comment",
+          "type": "String",
+          "description": "Optional free-text comment. May be an empty string."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "The newly created review ID (auto-incremented, starts at 1)."
+        }
+      ],
+      "auth_required": ["reviewer"],
+      "errors": [
+        "Rating must be at least 1",
+        "Rating must be at most 5",
+        "Reviewer has already reviewed this user"
+      ]
+    },
+    {
+      "name": "get_review",
+      "description": "Retrieve a review by its global ID.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "u64",
+          "description": "The review ID to retrieve."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "Review",
+          "description": "The full review record.",
+          "fields": {
+            "id": "u64",
+            "reviewee": "Address",
+            "reviewer": "Address",
+            "rating": "u32",
+            "comment": "String",
+            "timestamp": "u64"
+          }
+        }
+      ],
+      "errors": ["Review not found"]
+    },
+    {
+      "name": "get_reviews_for_user",
+      "description": "Return all review IDs submitted for a given reviewee. Returns an empty list if the user has no reviews.",
+      "inputs": [
+        {
+          "name": "reviewee",
+          "type": "Address",
+          "description": "The Stellar address whose reviews to retrieve."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "Vec<u64>",
+          "description": "Ordered list of review IDs for the reviewee, in submission order."
+        }
+      ]
+    },
+    {
+      "name": "get_reputation",
+      "description": "Return the average rating for a reviewee scaled by 100 to avoid floating-point arithmetic (e.g. 4.5 average → 450). Returns 0 if no reviews exist.",
+      "inputs": [
+        {
+          "name": "reviewee",
+          "type": "Address",
+          "description": "The Stellar address whose reputation to compute."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "u32",
+          "description": "Average rating × 100. Range: 0 (no reviews) to 500 (all 5-star reviews). Divide by 100 to get the decimal average."
+        }
+      ]
+    },
+    {
+      "name": "review_count",
+      "description": "Return the total number of reviews ever submitted.",
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "Total reviews submitted since contract deployment."
+        }
+      ]
+    }
+  ],
+  "types": {
+    "Review": {
+      "type": "struct",
+      "fields": {
+        "id": { "type": "u64", "description": "Auto-incremented global review identifier." },
+        "reviewee": { "type": "Address", "description": "Stellar address being reviewed." },
+        "reviewer": { "type": "Address", "description": "Stellar address that submitted the review." },
+        "rating": { "type": "u32", "description": "Rating value between 1 and 5 inclusive." },
+        "comment": { "type": "String", "description": "Free-text comment. May be empty." },
+        "timestamp": { "type": "u64", "description": "Ledger timestamp at submission time (Unix seconds)." }
+      }
+    }
+  },
+  "storage_keys": {
+    "Review(u64)": "Review — individual review record keyed by global review ID",
+    "ReviewCount": "u64 — monotonic counter for review ID generation",
+    "UserReviews(Address)": "Vec<u64> — list of review IDs for a given reviewee address",
+    "HasReviewed(Address, Address)": "bool — duplicate-prevention flag keyed by (reviewer, reviewee) pair"
+  },
+  "notes": [
+    "Review IDs are globally unique and auto-incremented starting at 1.",
+    "Each (reviewer, reviewee) pair may only have one review. Attempting a second submission panics.",
+    "get_reputation uses integer division: (sum_of_ratings * 100) / review_count.",
+    "The timestamp field is set from env.ledger().timestamp() at submission time.",
+    "A reviewer cannot review themselves (no explicit check, but the auth model requires the reviewer to sign)."
+  ]
+}

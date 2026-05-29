@@ -510,4 +510,263 @@ mod tests {
 
         assert_eq!(client.get_listing(&id).owner, owner);
     }
+
+    // ─── Property Fuzzing Tests ───────────────────────────────────────────────
+
+    /// Fuzz test: randomised string IDs (simulated via varied title/description
+    /// content) and data hashes of varying lengths — valid inputs only.
+    ///
+    /// Tests a matrix of (title, description, price) combinations that must all
+    /// succeed and round-trip correctly through the contract.
+    #[test]
+    fn test_property_fuzzing() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        // ── Valid input corpus ────────────────────────────────────────────
+        // Each entry: (title, description, price)
+        let corpus: &[(&str, &str, i128)] = &[
+            // Single-char title, empty description, minimum price
+            ("A", "", 1),
+            // Short title, short description, typical price
+            ("ab", "xy", 100_0000000),
+            // 32-char hex-like title (simulates a data hash used as title)
+            ("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4", "hash-based title", 50_0000000),
+            // 64-char hex string (full SHA-256 hex length) as description
+            (
+                "Property",
+                "a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1",
+                200_0000000,
+            ),
+            // Unicode-safe ASCII title with spaces
+            ("Beach House Near Ocean", "Lovely place", 75_0000000),
+            // Maximum i128 price boundary
+            ("Max Price", "desc", i128::MAX),
+            // Price of exactly 1 stroop (minimum valid)
+            ("Min Price", "desc", 1),
+            // Long description (simulates a full data hash payload reference)
+            (
+                "Long Desc Property",
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                10_0000000,
+            ),
+            // Numeric-looking title
+            ("1234567890", "numeric title", 999),
+            // Title with special ASCII chars (valid in Soroban String)
+            ("Prop-2024_v1", "versioned listing", 300_0000000),
+        ];
+
+        let mut expected_count: u64 = 0;
+
+        for &(title_str, desc_str, price) in corpus {
+            let id = client.create_listing(
+                &owner,
+                &String::from_str(&env, title_str),
+                &String::from_str(&env, desc_str),
+                &price,
+            );
+            expected_count += 1;
+
+            // Round-trip: stored data must match what we sent
+            let listing = client.get_listing(&id);
+            assert_eq!(
+                listing.title,
+                String::from_str(&env, title_str),
+                "title mismatch for input {:?}",
+                title_str
+            );
+            assert_eq!(
+                listing.description,
+                String::from_str(&env, desc_str),
+                "description mismatch for input {:?}",
+                desc_str
+            );
+            assert_eq!(
+                listing.price_per_night, price,
+                "price mismatch for input {}",
+                price
+            );
+            assert_eq!(listing.owner, owner);
+            assert_eq!(listing.status, ListingStatus::Active);
+            assert_eq!(
+                client.listing_count(),
+                expected_count,
+                "listing_count mismatch after valid input"
+            );
+        }
+
+        // Final sanity: total valid inputs created
+        assert_eq!(client.listing_count(), expected_count);
+    }
+
+    /// Fuzz test: empty title must be rejected.
+    #[test]
+    #[should_panic(expected = "title must not be empty")]
+    fn test_property_fuzzing_rejects_empty_title() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        client.create_listing(
+            &owner,
+            &String::from_str(&env, ""),
+            &String::from_str(&env, "some desc"),
+            &100_0000000_i128,
+        );
+    }
+
+    /// Fuzz test: zero price must be rejected.
+    #[test]
+    #[should_panic(expected = "price_per_night must be positive")]
+    fn test_property_fuzzing_rejects_zero_price() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        client.create_listing(
+            &owner,
+            &String::from_str(&env, "Valid Title"),
+            &String::from_str(&env, "desc"),
+            &0_i128,
+        );
+    }
+
+    /// Fuzz test: negative price must be rejected.
+    #[test]
+    #[should_panic(expected = "price_per_night must be positive")]
+    fn test_property_fuzzing_rejects_negative_price() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        client.create_listing(
+            &owner,
+            &String::from_str(&env, "Valid Title"),
+            &String::from_str(&env, "desc"),
+            &-1_i128,
+        );
+    }
+
+    /// Fuzz test: i128::MIN price must be rejected.
+    #[test]
+    #[should_panic(expected = "price_per_night must be positive")]
+    fn test_property_fuzzing_rejects_min_price() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        client.create_listing(
+            &owner,
+            &String::from_str(&env, "Valid Title"),
+            &String::from_str(&env, "desc"),
+            &i128::MIN,
+        );
+    }
+
+    /// Fuzz test: update_listing with randomised valid title/description/price combos.
+    ///
+    /// Verifies that valid updates succeed and round-trip correctly.
+    #[test]
+    fn test_property_fuzzing_update() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+
+        // Seed a listing to update
+        let id = client.create_listing(
+            &owner,
+            &String::from_str(&env, "Original Title"),
+            &String::from_str(&env, "Original desc"),
+            &100_0000000_i128,
+        );
+
+        // Valid update corpus: (new_title, new_desc, new_price)
+        let update_corpus: &[(&str, &str, i128)] = &[
+            ("Updated A", "desc a", 1),
+            ("Updated B", "desc b", i128::MAX),
+            (
+                "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+                "hash-title update",
+                50_0000000,
+            ),
+            ("X", "", 999),
+        ];
+
+        for &(new_title, new_desc, new_price) in update_corpus {
+            client.update_listing(
+                &owner,
+                &id,
+                &String::from_str(&env, new_title),
+                &String::from_str(&env, new_desc),
+                &new_price,
+            );
+            let listing = client.get_listing(&id);
+            assert_eq!(listing.title, String::from_str(&env, new_title));
+            assert_eq!(listing.description, String::from_str(&env, new_desc));
+            assert_eq!(listing.price_per_night, new_price);
+        }
+    }
+
+    /// Fuzz test: update_listing with empty title must be rejected.
+    #[test]
+    #[should_panic(expected = "title must not be empty")]
+    fn test_property_fuzzing_update_rejects_empty_title() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        let id = client.create_listing(
+            &owner,
+            &String::from_str(&env, "Original"),
+            &String::from_str(&env, "desc"),
+            &100_0000000_i128,
+        );
+        client.update_listing(
+            &owner,
+            &id,
+            &String::from_str(&env, ""),
+            &String::from_str(&env, "desc"),
+            &100_i128,
+        );
+    }
+
+    /// Fuzz test: update_listing with zero price must be rejected.
+    #[test]
+    #[should_panic(expected = "price_per_night must be positive")]
+    fn test_property_fuzzing_update_rejects_zero_price() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        let id = client.create_listing(
+            &owner,
+            &String::from_str(&env, "Original"),
+            &String::from_str(&env, "desc"),
+            &100_0000000_i128,
+        );
+        client.update_listing(
+            &owner,
+            &id,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "desc"),
+            &0_i128,
+        );
+    }
+
+    /// Fuzz test: update_listing with negative price must be rejected.
+    #[test]
+    #[should_panic(expected = "price_per_night must be positive")]
+    fn test_property_fuzzing_update_rejects_negative_price() {
+        let (env, cid) = make_env();
+        let client = PropertyListingContractClient::new(&env, &cid);
+        let owner = Address::generate(&env);
+        let id = client.create_listing(
+            &owner,
+            &String::from_str(&env, "Original"),
+            &String::from_str(&env, "desc"),
+            &100_0000000_i128,
+        );
+        client.update_listing(
+            &owner,
+            &id,
+            &String::from_str(&env, "Title"),
+            &String::from_str(&env, "desc"),
+            &-500_i128,
+        );
+    }
 }

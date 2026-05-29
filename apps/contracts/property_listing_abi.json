@@ -1,0 +1,176 @@
+{
+  "contract_name": "property-listing",
+  "version": "0.1.0",
+  "description": "Property Listing contract for Rentars — manages on-chain property listings with create, read, update, and status management. Each listing is owned by an Address and can only be mutated by its owner.",
+  "functions": [
+    {
+      "name": "create_listing",
+      "description": "Create a new property listing. Returns the new listing's auto-incremented ID. Panics if price_per_night is zero or negative, or if title is empty.",
+      "inputs": [
+        {
+          "name": "owner",
+          "type": "Address",
+          "description": "The Stellar address that owns and controls this listing."
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "description": "Human-readable listing title. Must not be empty."
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "description": "Listing description. May be empty."
+        },
+        {
+          "name": "price_per_night",
+          "type": "i128",
+          "description": "Nightly price in USDC stroops (1 USDC = 10,000,000 stroops). Must be greater than 0."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "The newly created listing ID (auto-incremented, starts at 1)."
+        }
+      ],
+      "auth_required": ["owner"],
+      "errors": [
+        "price_per_night must be positive",
+        "title must not be empty"
+      ]
+    },
+    {
+      "name": "get_listing",
+      "description": "Retrieve a listing by ID. Panics with 'Listing not found' if the ID does not exist.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "u64",
+          "description": "The listing ID to retrieve."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "PropertyListing",
+          "description": "The full on-chain listing record.",
+          "fields": {
+            "id": "u64",
+            "owner": "Address",
+            "title": "String",
+            "description": "String",
+            "price_per_night": "i128",
+            "status": "ListingStatus"
+          }
+        }
+      ],
+      "errors": ["Listing not found"]
+    },
+    {
+      "name": "update_listing",
+      "description": "Update a listing's mutable fields (title, description, price_per_night). Only the original owner may call this. Panics if caller is not the owner, listing not found, or inputs are invalid.",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "Address",
+          "description": "Must match the owner address recorded at creation time."
+        },
+        {
+          "name": "id",
+          "type": "u64",
+          "description": "The listing ID to update."
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "description": "New title. Must not be empty."
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "description": "New description. May be empty."
+        },
+        {
+          "name": "price_per_night",
+          "type": "i128",
+          "description": "New nightly price in USDC stroops. Must be greater than 0."
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["caller"],
+      "errors": [
+        "Listing not found",
+        "Unauthorized",
+        "price_per_night must be positive",
+        "title must not be empty"
+      ]
+    },
+    {
+      "name": "update_status",
+      "description": "Update the status of a listing. Only the original owner may call this.",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "Address",
+          "description": "Must match the owner address recorded at creation time."
+        },
+        {
+          "name": "id",
+          "type": "u64",
+          "description": "The listing ID to update."
+        },
+        {
+          "name": "status",
+          "type": "ListingStatus",
+          "description": "The new status to set.",
+          "enum_variants": ["Active", "Inactive", "Rented"]
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["caller"],
+      "errors": [
+        "Listing not found",
+        "Unauthorized"
+      ]
+    },
+    {
+      "name": "listing_count",
+      "description": "Return the total number of listings ever created.",
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "Total listings created since contract deployment."
+        }
+      ]
+    }
+  ],
+  "types": {
+    "ListingStatus": {
+      "type": "enum",
+      "variants": ["Active", "Inactive", "Rented"],
+      "description": "Status of a property listing."
+    },
+    "PropertyListing": {
+      "type": "struct",
+      "fields": {
+        "id": { "type": "u64", "description": "Auto-incremented listing identifier." },
+        "owner": { "type": "Address", "description": "Stellar address of the listing owner. Immutable after creation." },
+        "title": { "type": "String", "description": "Human-readable listing title." },
+        "description": { "type": "String", "description": "Listing description text." },
+        "price_per_night": { "type": "i128", "description": "Nightly price in USDC stroops." },
+        "status": { "type": "ListingStatus", "description": "Current listing status." }
+      }
+    }
+  },
+  "storage_keys": {
+    "Listing(u64)": "PropertyListing — individual listing record keyed by listing ID",
+    "ListingCount": "u64 — monotonic counter for listing ID generation"
+  },
+  "notes": [
+    "Listing IDs are auto-incremented by the contract starting at 1.",
+    "The owner field is set at creation and cannot be changed via update_listing.",
+    "All new listings start with ListingStatus::Active.",
+    "price_per_night is stored in USDC stroops: 1 USDC = 10,000,000 stroops."
+  ]
+}

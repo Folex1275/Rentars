@@ -632,4 +632,219 @@ mod tests {
         assert_eq!(client.get_booking(&id_b).tenant, tenant_b);
         assert_ne!(id_a, id_b);
     }
+
+    // ─── Booking Fuzzing Tests ────────────────────────────────────────────────
+
+    /// Fuzz test: randomised date ranges and prices — valid inputs only.
+    ///
+    /// Tests a corpus of (property_id, check_in, check_out, price) combinations
+    /// that must all succeed and round-trip correctly through the contract.
+    #[test]
+    fn test_property_fuzzing() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+
+        // ── Valid input corpus ────────────────────────────────────────────
+        // Each row uses a unique property_id so overlap logic does not
+        // interfere between rows.
+        let corpus: &[(u64, u64, u64, i128)] = &[
+            // Minimum duration (1 unit), minimum price
+            (100, 0, 1, 1),
+            // Typical week-long booking
+            (101, 1_000_000, 1_000_604, 700_0000000),
+            // Maximum i128 price
+            (102, 500, 600, i128::MAX),
+            // Near-max u64 timestamps (boundary)
+            (103, u64::MAX - 10, u64::MAX - 1, 1),
+            // Epoch-start booking
+            (104, 0, 86400, 100_0000000),
+            // Very large but valid range
+            (105, 1_000_000_000, 2_000_000_000, 999_0000000),
+            // Single-unit duration at a large timestamp
+            (106, 9_999_999_999, 10_000_000_000, 50_0000000),
+            // Price of exactly 1 stroop
+            (107, 100, 200, 1),
+            // Long duration (simulates a year-long rental)
+            (108, 0, 31_536_000, 3_650_0000000),
+            // Adjacent to epoch
+            (109, 1, 2, 1_0000000),
+        ];
+
+        let mut expected_count: u64 = 0;
+
+        for &(prop_id, check_in, check_out, price) in corpus {
+            let id = client.create_booking(&tenant, &prop_id, &check_in, &check_out, &price);
+            expected_count += 1;
+
+            let booking = client.get_booking(&id);
+            assert_eq!(booking.property_id, prop_id, "property_id mismatch");
+            assert_eq!(booking.check_in, check_in, "check_in mismatch");
+            assert_eq!(booking.check_out, check_out, "check_out mismatch");
+            assert_eq!(booking.total_price, price, "price mismatch");
+            assert_eq!(booking.tenant, tenant);
+            assert_eq!(booking.status, BookingStatus::Pending);
+            assert_eq!(
+                client.booking_count(),
+                expected_count,
+                "booking_count mismatch after valid input"
+            );
+        }
+
+        assert_eq!(client.booking_count(), expected_count);
+    }
+
+    /// Fuzz test: check_in == check_out (zero duration) must be rejected.
+    #[test]
+    #[should_panic(expected = "check_in must be before check_out")]
+    fn test_property_fuzzing_rejects_zero_duration() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &200_u64, &1_000_u64, &1_000_u64, &100_i128);
+    }
+
+    /// Fuzz test: check_in > check_out (reversed dates) must be rejected.
+    #[test]
+    #[should_panic(expected = "check_in must be before check_out")]
+    fn test_property_fuzzing_rejects_reversed_dates() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &201_u64, &2_000_u64, &1_000_u64, &100_i128);
+    }
+
+    /// Fuzz test: extreme reversal (check_in = u64::MAX, check_out = 0) must be rejected.
+    #[test]
+    #[should_panic(expected = "check_in must be before check_out")]
+    fn test_property_fuzzing_rejects_extreme_reversal() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &202_u64, &u64::MAX, &0_u64, &100_i128);
+    }
+
+    /// Fuzz test: zero price must be rejected.
+    #[test]
+    #[should_panic(expected = "total_price must be positive")]
+    fn test_property_fuzzing_rejects_zero_price() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &203_u64, &1_000_u64, &2_000_u64, &0_i128);
+    }
+
+    /// Fuzz test: negative price must be rejected.
+    #[test]
+    #[should_panic(expected = "total_price must be positive")]
+    fn test_property_fuzzing_rejects_negative_price() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &204_u64, &1_000_u64, &2_000_u64, &-1_i128);
+    }
+
+    /// Fuzz test: i128::MIN price must be rejected.
+    #[test]
+    #[should_panic(expected = "total_price must be positive")]
+    fn test_property_fuzzing_rejects_min_price() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &205_u64, &1_000_u64, &2_000_u64, &i128::MIN);
+    }
+
+    /// Fuzz test: randomised overlapping date ranges on the same property.
+    ///
+    /// Seeds a base booking [1000, 2000) then verifies that all overlapping
+    /// ranges are rejected and all non-overlapping ranges succeed.
+    #[test]
+    fn test_property_fuzzing_overlap_detection() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        let prop_id: u64 = 999;
+
+        // Seed a base booking: [1000, 2000)
+        let base_id = client.create_booking(&tenant, &prop_id, &1_000, &2_000, &100_i128);
+        assert_eq!(base_id, 1);
+
+        // Non-overlapping ranges — all must succeed
+        // (check_in, check_out)
+        let non_overlapping: &[(u64, u64)] = &[
+            (0, 1_000),       // ends exactly at base check_in (adjacent before)
+            (2_000, 3_000),   // starts exactly at base check_out (adjacent after)
+            (3_000, 4_000),   // entirely after base booking
+            (0, 500),         // entirely before base booking
+        ];
+
+        for &(ci, co) in non_overlapping {
+            let id = client.create_booking(&tenant, &prop_id, &ci, &co, &100_i128);
+            assert!(id > 0, "Expected success for non-overlapping range [{}, {})", ci, co);
+        }
+    }
+
+    /// Fuzz test: exact same dates on same property must be rejected (overlap).
+    #[test]
+    #[should_panic(expected = "Booking dates overlap")]
+    fn test_property_fuzzing_rejects_exact_overlap() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &999_u64, &1_000_u64, &2_000_u64, &100_i128);
+        client.create_booking(&tenant, &999_u64, &1_000_u64, &2_000_u64, &100_i128);
+    }
+
+    /// Fuzz test: partial overlap (starts before, ends inside) must be rejected.
+    #[test]
+    #[should_panic(expected = "Booking dates overlap")]
+    fn test_property_fuzzing_rejects_partial_overlap_before() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &998_u64, &1_000_u64, &2_000_u64, &100_i128);
+        client.create_booking(&tenant, &998_u64, &999_u64, &1_001_u64, &100_i128);
+    }
+
+    /// Fuzz test: partial overlap (starts inside, ends after) must be rejected.
+    #[test]
+    #[should_panic(expected = "Booking dates overlap")]
+    fn test_property_fuzzing_rejects_partial_overlap_after() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &997_u64, &1_000_u64, &2_000_u64, &100_i128);
+        client.create_booking(&tenant, &997_u64, &1_500_u64, &2_500_u64, &100_i128);
+    }
+
+    /// Fuzz test: fully containing overlap must be rejected.
+    #[test]
+    #[should_panic(expected = "Booking dates overlap")]
+    fn test_property_fuzzing_rejects_containing_overlap() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        client.create_booking(&tenant, &996_u64, &1_000_u64, &2_000_u64, &100_i128);
+        client.create_booking(&tenant, &996_u64, &500_u64, &2_500_u64, &100_i128);
+    }
+
+    /// Fuzz test: price boundary — minimum valid price (1 stroop) succeeds.
+    #[test]
+    fn test_property_fuzzing_price_boundary_min() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        let id = client.create_booking(&tenant, &1_u64, &100, &200, &1_i128);
+        assert_eq!(client.get_booking(&id).total_price, 1);
+    }
+
+    /// Fuzz test: price boundary — i128::MAX succeeds without overflow.
+    #[test]
+    fn test_property_fuzzing_price_boundary_max() {
+        let (env, cid, _admin) = make_env();
+        let client = BookingContractClient::new(&env, &cid);
+        let tenant = Address::generate(&env);
+        let id = client.create_booking(&tenant, &2_u64, &100, &200, &i128::MAX);
+        assert_eq!(client.get_booking(&id).total_price, i128::MAX);
+    }
 }

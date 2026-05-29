@@ -1,0 +1,255 @@
+{
+  "contract_name": "booking",
+  "version": "0.1.0",
+  "description": "Booking contract for Rentars — manages rental bookings with overlap prevention, status transitions, escrow ID tracking, and per-property booking indexes.",
+  "functions": [
+    {
+      "name": "initialize",
+      "description": "Initialize the contract with an admin address. Must be called exactly once. Panics if already initialized.",
+      "inputs": [
+        {
+          "name": "admin",
+          "type": "Address",
+          "description": "The Stellar address that will have admin privileges over booking status transitions and escrow management."
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["admin"]
+    },
+    {
+      "name": "create_booking",
+      "description": "Create a new booking for a property. Validates date ordering, positive price, and no overlapping active bookings. Returns the new booking ID.",
+      "inputs": [
+        {
+          "name": "tenant",
+          "type": "Address",
+          "description": "The Stellar address of the tenant making the booking."
+        },
+        {
+          "name": "property_id",
+          "type": "u64",
+          "description": "The on-chain property identifier being booked."
+        },
+        {
+          "name": "check_in",
+          "type": "u64",
+          "description": "Unix timestamp (seconds) for the check-in date. Must be strictly less than check_out."
+        },
+        {
+          "name": "check_out",
+          "type": "u64",
+          "description": "Unix timestamp (seconds) for the check-out date. Must be strictly greater than check_in."
+        },
+        {
+          "name": "total_price",
+          "type": "i128",
+          "description": "Total booking price in USDC stroops (1 USDC = 10,000,000 stroops). Must be greater than 0."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "The newly created booking ID (auto-incremented, starts at 1)."
+        }
+      ],
+      "auth_required": ["tenant"],
+      "errors": [
+        "check_in must be before check_out",
+        "total_price must be positive",
+        "Booking dates overlap with an existing booking"
+      ]
+    },
+    {
+      "name": "cancel_booking",
+      "description": "Cancel a booking. Only the tenant who created the booking may cancel it. Panics if already cancelled or completed.",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "Address",
+          "description": "Must match the tenant address on the booking."
+        },
+        {
+          "name": "booking_id",
+          "type": "u64",
+          "description": "The ID of the booking to cancel."
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["caller"],
+      "errors": [
+        "Booking not found",
+        "Unauthorized",
+        "Booking already cancelled",
+        "Cannot cancel a completed booking"
+      ]
+    },
+    {
+      "name": "update_status",
+      "description": "Update the status of a booking. Only the admin may call this. Enforces valid state machine transitions: Pending→Confirmed|Cancelled, Confirmed→Completed|Cancelled. Cancelled and Completed are terminal states.",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "Address",
+          "description": "Must be the admin address set during initialization."
+        },
+        {
+          "name": "booking_id",
+          "type": "u64",
+          "description": "The ID of the booking to update."
+        },
+        {
+          "name": "new_status",
+          "type": "BookingStatus",
+          "description": "The target status. Must be a valid transition from the current status.",
+          "enum_variants": ["Pending", "Confirmed", "Cancelled", "Completed"]
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["caller"],
+      "errors": [
+        "Contract not initialized",
+        "Unauthorized",
+        "Booking not found",
+        "Invalid status transition"
+      ]
+    },
+    {
+      "name": "set_escrow_id",
+      "description": "Attach an off-chain escrow reference string to a booking. Only the admin may call this.",
+      "inputs": [
+        {
+          "name": "caller",
+          "type": "Address",
+          "description": "Must be the admin address set during initialization."
+        },
+        {
+          "name": "booking_id",
+          "type": "u64",
+          "description": "The ID of the booking to update."
+        },
+        {
+          "name": "escrow_id",
+          "type": "String",
+          "description": "Off-chain escrow reference identifier (e.g. a UUID or transaction hash)."
+        }
+      ],
+      "outputs": [],
+      "auth_required": ["caller"],
+      "errors": [
+        "Contract not initialized",
+        "Unauthorized",
+        "Booking not found"
+      ]
+    },
+    {
+      "name": "get_booking",
+      "description": "Retrieve a booking by its ID.",
+      "inputs": [
+        {
+          "name": "id",
+          "type": "u64",
+          "description": "The booking ID to retrieve."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "Booking",
+          "description": "The full booking record.",
+          "fields": {
+            "id": "u64",
+            "property_id": "u64",
+            "tenant": "Address",
+            "check_in": "u64",
+            "check_out": "u64",
+            "total_price": "i128",
+            "status": "BookingStatus",
+            "escrow_id": "String"
+          }
+        }
+      ],
+      "errors": ["Booking not found"]
+    },
+    {
+      "name": "get_property_bookings",
+      "description": "Return all booking IDs for a given property. Returns an empty list if the property has no bookings.",
+      "inputs": [
+        {
+          "name": "property_id",
+          "type": "u64",
+          "description": "The property identifier to query."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "Vec<u64>",
+          "description": "Ordered list of booking IDs associated with the property."
+        }
+      ]
+    },
+    {
+      "name": "check_availability",
+      "description": "Check whether a date range is available for a property (no active overlap). Cancelled bookings do not block availability.",
+      "inputs": [
+        {
+          "name": "property_id",
+          "type": "u64",
+          "description": "The property identifier to check."
+        },
+        {
+          "name": "check_in",
+          "type": "u64",
+          "description": "Proposed check-in Unix timestamp."
+        },
+        {
+          "name": "check_out",
+          "type": "u64",
+          "description": "Proposed check-out Unix timestamp."
+        }
+      ],
+      "outputs": [
+        {
+          "type": "bool",
+          "description": "true if the date range is available, false if it overlaps an active booking."
+        }
+      ]
+    },
+    {
+      "name": "booking_count",
+      "description": "Return the total number of bookings ever created (includes cancelled and completed).",
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "u64",
+          "description": "Total bookings created since contract deployment."
+        }
+      ]
+    }
+  ],
+  "types": {
+    "BookingStatus": {
+      "type": "enum",
+      "variants": ["Pending", "Confirmed", "Cancelled", "Completed"],
+      "description": "Lifecycle status of a booking. Cancelled and Completed are terminal states."
+    },
+    "Booking": {
+      "type": "struct",
+      "fields": {
+        "id": { "type": "u64", "description": "Auto-incremented booking identifier." },
+        "property_id": { "type": "u64", "description": "The property being booked." },
+        "tenant": { "type": "Address", "description": "Stellar address of the tenant." },
+        "check_in": { "type": "u64", "description": "Check-in Unix timestamp (seconds)." },
+        "check_out": { "type": "u64", "description": "Check-out Unix timestamp (seconds)." },
+        "total_price": { "type": "i128", "description": "Total price in USDC stroops." },
+        "status": { "type": "BookingStatus", "description": "Current booking lifecycle status." },
+        "escrow_id": { "type": "String", "description": "Off-chain escrow reference. Empty string until set by admin." }
+      }
+    }
+  },
+  "storage_keys": {
+    "Initialized": "bool — contract initialization flag",
+    "Admin": "Address — admin address set during initialize()",
+    "Booking(u64)": "Booking — individual booking record keyed by booking ID",
+    "BookingCount": "u64 — monotonic counter for booking ID generation",
+    "PropertyBookings(u64)": "Vec<u64> — list of booking IDs for a given property ID"
+  }
+}

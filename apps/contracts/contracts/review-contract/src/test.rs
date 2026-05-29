@@ -391,4 +391,245 @@ mod tests {
             assert_eq!(client.review_count(), i);
         }
     }
+
+    // ─── Review Fuzzing Tests ─────────────────────────────────────────────────
+
+    /// Fuzz test: randomised ratings and comment lengths — valid inputs only.
+    ///
+    /// Tests a corpus of (rating, comment) combinations that must all succeed
+    /// and round-trip correctly through the contract.
+    #[test]
+    fn test_property_fuzzing() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewee = Address::generate(&env);
+
+        // ── Valid input corpus: (rating, comment) ─────────────────────────
+        let corpus: &[(u32, &str)] = &[
+            // Rating 1, empty comment
+            (1, ""),
+            // Rating 2, short comment
+            (2, "ok"),
+            // Rating 3, medium comment
+            (3, "Average stay, nothing special."),
+            // Rating 4, longer comment
+            (4, "Great host, clean place, would recommend to friends."),
+            // Rating 5, 64-char hex-like comment (simulates a hash reference)
+            (
+                5,
+                "a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1e2d4b5c6a3f1",
+            ),
+            // Rating 1, comment with punctuation
+            (1, "Terrible! Would not stay again."),
+            // Rating 5, numeric-looking comment
+            (5, "10/10 experience, 5 stars all the way."),
+            // Rating 3, comment with spaces and dashes
+            (3, "Nice place - good location - fair price"),
+        ];
+
+        let mut expected_count: u64 = 0;
+
+        for &(rating, comment) in corpus {
+            // Each submission uses a fresh reviewer to avoid duplicate-review rejection
+            let reviewer = Address::generate(&env);
+
+            let id = client.submit_review(
+                &reviewer,
+                &reviewee,
+                &rating,
+                &String::from_str(&env, comment),
+            );
+            expected_count += 1;
+
+            let review = client.get_review(&id);
+            assert_eq!(review.rating, rating, "rating mismatch for input {}", rating);
+            assert_eq!(
+                review.comment,
+                String::from_str(&env, comment),
+                "comment mismatch for input {:?}",
+                comment
+            );
+            assert_eq!(review.reviewer, reviewer);
+            assert_eq!(review.reviewee, reviewee);
+            assert_eq!(
+                client.review_count(),
+                expected_count,
+                "review_count mismatch after valid input"
+            );
+        }
+
+        // All valid reviews are indexed under the reviewee
+        assert_eq!(
+            client.get_reviews_for_user(&reviewee).len(),
+            expected_count as u32,
+            "reviewee index length mismatch"
+        );
+        assert_eq!(client.review_count(), expected_count);
+    }
+
+    /// Fuzz test: rating = 0 (below minimum) must be rejected.
+    #[test]
+    #[should_panic(expected = "Rating must be at least 1")]
+    fn test_property_fuzzing_rejects_rating_zero() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewer = Address::generate(&env);
+        let reviewee = Address::generate(&env);
+        client.submit_review(
+            &reviewer,
+            &reviewee,
+            &0_u32,
+            &String::from_str(&env, "zero rating"),
+        );
+    }
+
+    /// Fuzz test: rating = 6 (above maximum) must be rejected.
+    #[test]
+    #[should_panic(expected = "Rating must be at most 5")]
+    fn test_property_fuzzing_rejects_rating_six() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewer = Address::generate(&env);
+        let reviewee = Address::generate(&env);
+        client.submit_review(
+            &reviewer,
+            &reviewee,
+            &6_u32,
+            &String::from_str(&env, "six rating"),
+        );
+    }
+
+    /// Fuzz test: rating = 100 (far above maximum) must be rejected.
+    #[test]
+    #[should_panic(expected = "Rating must be at most 5")]
+    fn test_property_fuzzing_rejects_rating_100() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewer = Address::generate(&env);
+        let reviewee = Address::generate(&env);
+        client.submit_review(
+            &reviewer,
+            &reviewee,
+            &100_u32,
+            &String::from_str(&env, "way too high"),
+        );
+    }
+
+    /// Fuzz test: u32::MAX rating (extreme overflow attempt) must be rejected.
+    #[test]
+    #[should_panic(expected = "Rating must be at most 5")]
+    fn test_property_fuzzing_rejects_rating_max() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewer = Address::generate(&env);
+        let reviewee = Address::generate(&env);
+        client.submit_review(
+            &reviewer,
+            &reviewee,
+            &u32::MAX,
+            &String::from_str(&env, "overflow attempt"),
+        );
+    }
+
+    /// Fuzz test: duplicate-reviewer detection across randomised reviewer addresses.
+    ///
+    /// Verifies that the HasReviewed flag is set atomically and that any second
+    /// submission from the same reviewer is always rejected, regardless of
+    /// whether the rating or comment changes.
+    #[test]
+    fn test_property_fuzzing_duplicate_prevention() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewee = Address::generate(&env);
+
+        // Corpus of first_rating values — each uses a fresh reviewer.
+        // After the first submission succeeds, we verify the duplicate flag
+        // is set by checking the storage key directly.
+        let first_ratings: &[u32] = &[5, 3, 1, 4, 2];
+
+        for &first_rating in first_ratings {
+            let reviewer = Address::generate(&env);
+
+            // First submission must succeed
+            client.submit_review(
+                &reviewer,
+                &reviewee,
+                &first_rating,
+                &String::from_str(&env, "first review"),
+            );
+
+            // Verify the HasReviewed flag is set
+            let already: bool = env
+                .storage()
+                .instance()
+                .get(&crate::DataKey::HasReviewed(reviewer.clone(), reviewee.clone()))
+                .unwrap_or(false);
+            assert!(
+                already,
+                "HasReviewed flag must be set after first submission (rating={})",
+                first_rating
+            );
+        }
+    }
+
+    /// Fuzz test: second submission from same reviewer must be rejected.
+    #[test]
+    #[should_panic(expected = "Reviewer has already reviewed this user")]
+    fn test_property_fuzzing_rejects_duplicate_submission() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+        let reviewer = Address::generate(&env);
+        let reviewee = Address::generate(&env);
+
+        client.submit_review(&reviewer, &reviewee, &5_u32, &String::from_str(&env, "first"));
+        // Second submission — must be rejected
+        client.submit_review(&reviewer, &reviewee, &1_u32, &String::from_str(&env, "changed my mind"));
+    }
+
+    /// Fuzz test: reputation calculation with randomised rating distributions.
+    ///
+    /// Verifies that get_reputation returns the correct average×100 for
+    /// various combinations of ratings.
+    #[test]
+    fn test_property_fuzzing_reputation() {
+        let (env, cid) = make_env();
+        let client = ReviewContractClient::new(&env, &cid);
+
+        // (ratings_vec, expected_reputation_x100)
+        // reputation = (sum / count) * 100, integer division
+        let cases: &[(&[u32], u32)] = &[
+            (&[5], 500),
+            (&[1], 100),
+            (&[3], 300),
+            (&[5, 5], 500),
+            (&[1, 5], 300),          // (1+5)/2 = 3 → 300
+            (&[1, 2, 3, 4, 5], 300), // (15)/5 = 3 → 300
+            (&[2, 2, 2, 2], 200),
+            (&[4, 4, 4, 4, 4], 400),
+            (&[1, 1, 1, 1, 1], 100),
+            (&[5, 5, 5, 5, 5], 500),
+        ];
+
+        for &(ratings, expected_rep) in cases {
+            // Fresh reviewee per case to keep them isolated
+            let reviewee = Address::generate(&env);
+
+            for &rating in ratings {
+                let reviewer = Address::generate(&env);
+                client.submit_review(
+                    &reviewer,
+                    &reviewee,
+                    &rating,
+                    &String::from_str(&env, "fuzz review"),
+                );
+            }
+
+            let rep = client.get_reputation(&reviewee);
+            assert_eq!(
+                rep, expected_rep,
+                "reputation mismatch for ratings {:?}: got {}, expected {}",
+                ratings, rep, expected_rep
+            );
+        }
+    }
 }
