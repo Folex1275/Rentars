@@ -3,14 +3,14 @@
 // Handles: property listing, rental booking, USDC escrow
 
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String};
 
 #[contracttype]
 #[derive(Clone)]
-pub struct Property {
+pub struct PropertyListing {
     pub id: u64,
     pub owner: Address,
-    pub title: String,
+    pub data_hash: String,
     pub price_per_night: i128, // in USDC stroops
     pub available: bool,
 }
@@ -31,7 +31,6 @@ pub struct Booking {
 pub enum DataKey {
     Property(u64),
     Booking(u64),
-    PropertyCount,
     BookingCount,
 }
 
@@ -40,29 +39,60 @@ pub struct RentarsContract;
 
 #[contractimpl]
 impl RentarsContract {
-    /// List a new property on-chain
-    pub fn list_property(
+    /// Create a new property listing on-chain.
+    ///
+    /// `data_hash` is the SHA-256 hash (hex-encoded) of the off-chain property
+    /// JSON stored in Supabase. The hash is the only integrity anchor on-chain;
+    /// titles, descriptions, photos, etc. live off-chain.
+    pub fn create_listing(
         env: Env,
+        id: u64,
+        data_hash: String,
         owner: Address,
-        title: String,
         price_per_night: i128,
-    ) -> u64 {
+    ) {
         owner.require_auth();
 
-        let count: u64 = env.storage().instance().get(&DataKey::PropertyCount).unwrap_or(0);
-        let id = count + 1;
+        assert!(
+            !env.storage().instance().has(&DataKey::Property(id)),
+            "Listing already exists"
+        );
 
-        let property = Property {
+        let listing = PropertyListing {
             id,
             owner,
-            title,
+            data_hash,
             price_per_night,
             available: true,
         };
 
-        env.storage().instance().set(&DataKey::Property(id), &property);
-        env.storage().instance().set(&DataKey::PropertyCount, &id);
-        id
+        env.storage().instance().set(&DataKey::Property(id), &listing);
+    }
+
+    /// Update the `data_hash` of an existing listing. Only the recorded `owner`
+    /// can update; the supplied `owner` must match the on-chain owner and must
+    /// authorise the transaction.
+    pub fn update_listing(env: Env, id: u64, data_hash: String, owner: Address) {
+        owner.require_auth();
+
+        let mut listing: PropertyListing = env
+            .storage()
+            .instance()
+            .get(&DataKey::Property(id))
+            .expect("Listing not found");
+
+        assert!(listing.owner == owner, "Unauthorized: caller is not the listing owner");
+
+        listing.data_hash = data_hash;
+        env.storage().instance().set(&DataKey::Property(id), &listing);
+    }
+
+    /// Return the full on-chain `PropertyListing` for `id`.
+    pub fn get_listing(env: Env, id: u64) -> PropertyListing {
+        env.storage()
+            .instance()
+            .get(&DataKey::Property(id))
+            .expect("Listing not found")
     }
 
     /// Create a booking and lock USDC in escrow
@@ -75,16 +105,16 @@ impl RentarsContract {
     ) -> u64 {
         tenant.require_auth();
 
-        let mut property: Property = env
+        let mut listing: PropertyListing = env
             .storage()
             .instance()
             .get(&DataKey::Property(property_id))
-            .expect("Property not found");
+            .expect("Listing not found");
 
-        assert!(property.available, "Property not available");
+        assert!(listing.available, "Property not available");
 
         let nights = check_out - check_in;
-        let total_amount = property.price_per_night * nights as i128;
+        let total_amount = listing.price_per_night * nights as i128;
 
         let count: u64 = env.storage().instance().get(&DataKey::BookingCount).unwrap_or(0);
         let id = count + 1;
@@ -99,8 +129,8 @@ impl RentarsContract {
             confirmed: false,
         };
 
-        property.available = false;
-        env.storage().instance().set(&DataKey::Property(property_id), &property);
+        listing.available = false;
+        env.storage().instance().set(&DataKey::Property(property_id), &listing);
         env.storage().instance().set(&DataKey::Booking(id), &booking);
         env.storage().instance().set(&DataKey::BookingCount, &id);
         id
@@ -119,14 +149,6 @@ impl RentarsContract {
         assert!(!booking.confirmed, "Already confirmed");
         booking.confirmed = true;
         env.storage().instance().set(&DataKey::Booking(booking_id), &booking);
-    }
-
-    /// Get property details
-    pub fn get_property(env: Env, id: u64) -> Property {
-        env.storage()
-            .instance()
-            .get(&DataKey::Property(id))
-            .expect("Property not found")
     }
 
     /// Get booking details
