@@ -1,28 +1,46 @@
 import type { Request, Response } from 'express';
-import { supabase } from '../config/supabase.js';
 import {
-  getFeaturedProperties,
-  getAvailabilityRanges,
-  setAvailabilityRanges,
+  createProperty,
+  deleteProperty,
+  getAllProperties,
+  getPropertyById,
   searchProperties,
+  updateProperty,
 } from '../services/property.service.js';
-import type { AuthRequest } from '../middleware/auth.middleware.js';
-import type { propertySearchSchema } from '../validators/property.validator.js';
-import type { z } from 'zod';
 
-// Augment Request to carry the parsed query attached by validateQuery middleware
-type SearchRequest = Request & { parsedQuery?: z.infer<typeof propertySearchSchema> };
+export async function getProperties(req: Request, res: Response): Promise<void> {
+  // If any search filter query params are present, delegate to searchProperties
+  const { city, country, min_price, max_price, bedrooms, status } = req.query;
 
-// ─── List / search ────────────────────────────────────────────────────────────
+  const hasFilters = city || country || min_price || max_price || bedrooms || status;
 
-export async function getProperties(req: SearchRequest, res: Response): Promise<void> {
-  try {
-    const filters = req.parsedQuery ?? {};
-    const result = await searchProperties(filters);
-    res.json(result);
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
+  if (hasFilters) {
+    const result = await searchProperties({
+      city: city as string | undefined,
+      country: country as string | undefined,
+      min_price: min_price ? Number(min_price) : undefined,
+      max_price: max_price ? Number(max_price) : undefined,
+      bedrooms: bedrooms ? Number(bedrooms) : undefined,
+      status: status as string | undefined,
+    });
+
+    if (!result.success) {
+      res.status(500).json({ error: result.error });
+      return;
+    }
+
+    res.json(result.data);
+    return;
   }
+
+  const result = await getAllProperties();
+
+  if (!result.success) {
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  res.json(result.data);
 }
 
 // ─── Featured ─────────────────────────────────────────────────────────────────
@@ -39,97 +57,46 @@ export async function getFeatured(_req: Request, res: Response): Promise<void> {
 // ─── Single property ──────────────────────────────────────────────────────────
 
 export async function getProperty(req: Request, res: Response): Promise<void> {
-  const { data, error } = await supabase
-    .from('properties')
-    .select('*')
-    .eq('id', req.params.id)
-    .single();
+  const result = await getPropertyById(req.params.id);
 
-  if (error) {
-    res.status(404).json({ error: 'Property not found' });
+  if (!result.success) {
+    res.status(404).json({ error: result.error });
     return;
   }
-  res.json(data);
+
+  res.json(result.data);
 }
 
-// ─── Create ───────────────────────────────────────────────────────────────────
+export async function createPropertyHandler(req: Request, res: Response): Promise<void> {
+  const result = await createProperty(req.body);
 
-export async function createProperty(req: AuthRequest, res: Response): Promise<void> {
-  // req.body has already been validated and sanitised by propertySchema middleware
-  const payload = { ...req.body, owner_id: req.userId };
-
-  const { data, error } = await supabase
-    .from('properties')
-    .insert(payload)
-    .select()
-    .single();
-
-  if (error) {
-    res.status(400).json({ error: error.message });
+  if (!result.success) {
+    res.status(400).json({ error: result.error });
     return;
   }
-  res.status(201).json(data);
+
+  res.status(201).json(result.data);
 }
 
-// ─── Update ───────────────────────────────────────────────────────────────────
+export async function updatePropertyHandler(req: Request, res: Response): Promise<void> {
+  const result = await updateProperty(req.params.id, req.body);
 
-export async function updateProperty(req: AuthRequest, res: Response): Promise<void> {
-  // Verify ownership before updating
-  const { data: existing, error: fetchError } = await supabase
-    .from('properties')
-    .select('owner_id')
-    .eq('id', req.params.id)
-    .single();
-
-  if (fetchError || !existing) {
-    res.status(404).json({ error: 'Property not found' });
+  if (!result.success) {
+    res.status(400).json({ error: result.error });
     return;
   }
 
-  if ((existing as Record<string, unknown>).owner_id !== req.userId) {
-    res.status(403).json({ error: 'Forbidden: you do not own this property' });
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from('properties')
-    .update(req.body)
-    .eq('id', req.params.id)
-    .select()
-    .single();
-
-  if (error) {
-    res.status(400).json({ error: error.message });
-    return;
-  }
-  res.json(data);
+  res.json(result.data);
 }
 
-// ─── Delete ───────────────────────────────────────────────────────────────────
+export async function deletePropertyHandler(req: Request, res: Response): Promise<void> {
+  const result = await deleteProperty(req.params.id);
 
-export async function deleteProperty(req: AuthRequest, res: Response): Promise<void> {
-  // Verify ownership before deleting
-  const { data: existing, error: fetchError } = await supabase
-    .from('properties')
-    .select('owner_id')
-    .eq('id', req.params.id)
-    .single();
-
-  if (fetchError || !existing) {
-    res.status(404).json({ error: 'Property not found' });
+  if (!result.success) {
+    res.status(400).json({ error: result.error });
     return;
   }
 
-  if ((existing as Record<string, unknown>).owner_id !== req.userId) {
-    res.status(403).json({ error: 'Forbidden: you do not own this property' });
-    return;
-  }
-
-  const { error } = await supabase.from('properties').delete().eq('id', req.params.id);
-  if (error) {
-    res.status(400).json({ error: error.message });
-    return;
-  }
   res.status(204).send();
 }
 

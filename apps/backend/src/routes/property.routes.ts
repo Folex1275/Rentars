@@ -1,23 +1,12 @@
 import { Router } from 'express';
 import {
-  createProperty,
-  deleteProperty,
-  getFeatured,
-  getAvailability,
+  createPropertyHandler,
+  deletePropertyHandler,
   getProperties,
   getProperty,
-  setAvailability,
-  updateProperty,
+  updatePropertyHandler,
 } from '../controllers/property.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
-import {
-  propertySchema,
-  propertySearchSchema,
-  updatePropertySchema,
-  validateBody,
-  validateQuery,
-} from '../validators/property.validator.js';
-import { z } from 'zod';
 
 const router = Router();
 
@@ -31,20 +20,9 @@ router.get('/featured', getFeatured);
 
 // GET /api/properties/:id
 router.get('/:id', getProperty);
-
-// GET /api/properties/:id/availability
-router.get('/:id/availability', getAvailability);
-
-// ── Authenticated routes ──────────────────────────────────────────────────────
-
-// POST /api/properties
-router.post('/', authenticate, validateBody(propertySchema), createProperty);
-
-// PUT /api/properties/:id
-router.put('/:id', authenticate, validateBody(updatePropertySchema), updateProperty);
-
-// DELETE /api/properties/:id
-router.delete('/:id', authenticate, deleteProperty);
+router.post('/', authenticate, createPropertyHandler);
+router.put('/:id', authenticate, updatePropertyHandler);
+router.delete('/:id', authenticate, deletePropertyHandler);
 
 // PUT /api/properties/:id/availability  (owner sets blocked date ranges)
 const availabilityRangeSchema = z.object({
