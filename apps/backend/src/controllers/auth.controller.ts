@@ -1,28 +1,28 @@
 import type { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { supabase } from '../config/supabase';
+import { loginUser, registerUser } from '../services/auth.service.js';
 
 export async function register(req: Request, res: Response): Promise<void> {
   const { email, password } = req.body;
-  const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) {
-    res.status(400).json({ error: error.message });
+
+  const result = await registerUser(email, password);
+
+  if (!result.success) {
+    res.status(400).json({ error: result.error });
     return;
   }
-  res.status(201).json({ user: data.user });
+
+  res.status(201).json(result.data);
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
   const { email, password } = req.body;
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    res.status(401).json({ error: error.message });
+
+  const result = await loginUser(email, password);
+
+  if (!result.success) {
+    res.status(401).json({ error: result.error });
     return;
   }
-  const token = jwt.sign(
-    { userId: data.user.id },
-    process.env.JWT_SECRET || 'secret',
-    { expiresIn: '7d' }
-  );
-  res.json({ token, user: data.user });
+
+  res.json(result.data);
 }
