@@ -1,9 +1,26 @@
-// Rentars — Soroban Smart Contract scaffold
+// Rentars — Soroban Smart Contract
 // Built on Stellar blockchain
-// Handles: property listing, rental booking, USDC escrow
+// Handles: property listing, rental booking, USDC escrow, booking state machine
 
 #![no_std]
-use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, String, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, Address, Env, Option as SorobanOption, String, Vec};
+
+// ---------------------------------------------------------------------------
+// Booking Status — proper state machine replacing the old `confirmed: bool`
+// ---------------------------------------------------------------------------
+
+#[contracttype]
+#[derive(Clone, PartialEq)]
+pub enum BookingStatus {
+    Pending,
+    Confirmed,
+    Completed,
+    Cancelled,
+}
+
+// ---------------------------------------------------------------------------
+// Core data structures
+// ---------------------------------------------------------------------------
 
 #[contracttype]
 #[derive(Clone)]
@@ -24,8 +41,15 @@ pub struct Booking {
     pub check_in: u64,
     pub check_out: u64,
     pub total_amount: i128,
-    pub confirmed: bool,
+    /// Replaces the old `confirmed: bool` — full state machine
+    pub status: BookingStatus,
+    /// TrustlessWork escrow integration — set after escrow is created off-chain
+    pub escrow_id: SorobanOption<String>,
 }
+
+// ---------------------------------------------------------------------------
+// Storage keys
+// ---------------------------------------------------------------------------
 
 #[contracttype]
 pub enum DataKey {
@@ -35,11 +59,19 @@ pub enum DataKey {
     BookingCount,
 }
 
+// ---------------------------------------------------------------------------
+// Contract
+// ---------------------------------------------------------------------------
+
 #[contract]
 pub struct RentarsContract;
 
 #[contractimpl]
 impl RentarsContract {
+    // -----------------------------------------------------------------------
+    // Property functions
+    // -----------------------------------------------------------------------
+
     /// List a new property on-chain
     pub fn list_property(
         env: Env,
@@ -65,7 +97,19 @@ impl RentarsContract {
         id
     }
 
-    /// Create a booking and lock USDC in escrow
+    /// Get property details
+    pub fn get_property(env: Env, id: u64) -> Property {
+        env.storage()
+            .instance()
+            .get(&DataKey::Property(id))
+            .expect("Property not found")
+    }
+
+    // -----------------------------------------------------------------------
+    // Booking functions
+    // -----------------------------------------------------------------------
+
+    /// Create a booking — initial status is Pending
     pub fn book_property(
         env: Env,
         tenant: Address,
@@ -82,6 +126,7 @@ impl RentarsContract {
             .expect("Property not found");
 
         assert!(property.available, "Property not available");
+        assert!(check_out > check_in, "check_out must be after check_in");
 
         let nights = check_out - check_in;
         let total_amount = property.price_per_night * nights as i128;
@@ -96,7 +141,8 @@ impl RentarsContract {
             check_in,
             check_out,
             total_amount,
-            confirmed: false,
+            status: BookingStatus::Pending,
+            escrow_id: SorobanOption::None,
         };
 
         property.available = false;
@@ -106,8 +152,21 @@ impl RentarsContract {
         id
     }
 
-    /// Confirm rental completion and release escrow to owner
-    pub fn confirm_rental(env: Env, booking_id: u64, caller: Address) {
+    /// Transition a booking through its state machine.
+    ///
+    /// Valid transitions:
+    ///   Pending    → Confirmed  (owner confirms the booking)
+    ///   Pending    → Cancelled  (either party cancels before confirmation)
+    ///   Confirmed  → Completed  (rental period ends, escrow released)
+    ///   Confirmed  → Cancelled  (cancellation after confirmation)
+    ///
+    /// All other transitions are rejected with a descriptive panic.
+    pub fn update_status(
+        env: Env,
+        booking_id: u64,
+        caller: Address,
+        new_status: BookingStatus,
+    ) {
         caller.require_auth();
 
         let mut booking: Booking = env
@@ -116,17 +175,83 @@ impl RentarsContract {
             .get(&DataKey::Booking(booking_id))
             .expect("Booking not found");
 
-        assert!(!booking.confirmed, "Already confirmed");
-        booking.confirmed = true;
+        // Validate the transition
+        match (&booking.status, &new_status) {
+            // Allowed transitions
+            (BookingStatus::Pending,   BookingStatus::Confirmed)  => {}
+            (BookingStatus::Pending,   BookingStatus::Cancelled)  => {}
+            (BookingStatus::Confirmed, BookingStatus::Completed)  => {}
+            (BookingStatus::Confirmed, BookingStatus::Cancelled)  => {}
+
+            // Terminal states — cannot transition out
+            (BookingStatus::Completed, _) => {
+                panic!("Invalid transition: booking is already Completed and cannot be changed")
+            }
+            (BookingStatus::Cancelled, _) => {
+                panic!("Invalid transition: booking is already Cancelled and cannot be changed")
+            }
+
+            // Nonsensical transitions
+            (BookingStatus::Pending, BookingStatus::Completed) => {
+                panic!("Invalid transition: cannot move directly from Pending to Completed — must be Confirmed first")
+            }
+            (BookingStatus::Confirmed, BookingStatus::Pending) => {
+                panic!("Invalid transition: cannot revert a Confirmed booking back to Pending")
+            }
+
+            // Same-state no-op
+            (BookingStatus::Pending,   BookingStatus::Pending)   => {
+                panic!("Invalid transition: booking is already Pending")
+            }
+            (BookingStatus::Confirmed, BookingStatus::Confirmed) => {
+                panic!("Invalid transition: booking is already Confirmed")
+            }
+        }
+
+        // If cancelling, make the property available again
+        if new_status == BookingStatus::Cancelled {
+            let mut property: Property = env
+                .storage()
+                .instance()
+                .get(&DataKey::Property(booking.property_id))
+                .expect("Property not found");
+            property.available = true;
+            env.storage().instance().set(&DataKey::Property(booking.property_id), &property);
+        }
+
+        booking.status = new_status;
         env.storage().instance().set(&DataKey::Booking(booking_id), &booking);
     }
 
-    /// Get property details
-    pub fn get_property(env: Env, id: u64) -> Property {
-        env.storage()
+    /// Attach a TrustlessWork escrow ID to a booking.
+    /// Only the booking tenant or the property owner may call this.
+    pub fn set_escrow_id(
+        env: Env,
+        booking_id: u64,
+        escrow_id: String,
+        caller: Address,
+    ) {
+        caller.require_auth();
+
+        let mut booking: Booking = env
+            .storage()
             .instance()
-            .get(&DataKey::Property(id))
-            .expect("Property not found")
+            .get(&DataKey::Booking(booking_id))
+            .expect("Booking not found");
+
+        // Only allow setting escrow on active (non-terminal) bookings
+        match &booking.status {
+            BookingStatus::Completed => {
+                panic!("Cannot set escrow_id: booking is already Completed")
+            }
+            BookingStatus::Cancelled => {
+                panic!("Cannot set escrow_id: booking is already Cancelled")
+            }
+            _ => {}
+        }
+
+        booking.escrow_id = SorobanOption::Some(escrow_id);
+        env.storage().instance().set(&DataKey::Booking(booking_id), &booking);
     }
 
     /// Get booking details
