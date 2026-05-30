@@ -4,14 +4,20 @@ import {
   deleteBooking,
   getBooking,
   updateBooking,
-} from '../controllers/booking.controller';
-import { authenticate } from '../middleware/auth.middleware';
+} from '../controllers/booking.controller.js';
+import { authenticate } from '../middleware/auth.middleware.js';
+import {
+  createBookingSchema,
+  updateBookingSchema,
+  validateBody,
+} from '../validators/booking.validator.js';
 
 const router = Router();
 
+// All booking routes require authentication
 router.get('/:id', authenticate, getBooking);
-router.post('/', authenticate, createBooking);
-router.patch('/:id', authenticate, updateBooking);
+router.post('/', authenticate, validateBody(createBookingSchema), createBooking);
+router.patch('/:id', authenticate, validateBody(updateBookingSchema), updateBooking);
 router.delete('/:id', authenticate, deleteBooking);
 
 export default router;

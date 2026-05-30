@@ -43,6 +43,19 @@ export async function getProperties(req: Request, res: Response): Promise<void> 
   res.json(result.data);
 }
 
+// ─── Featured ─────────────────────────────────────────────────────────────────
+
+export async function getFeatured(_req: Request, res: Response): Promise<void> {
+  try {
+    const data = await getFeaturedProperties();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+}
+
+// ─── Single property ──────────────────────────────────────────────────────────
+
 export async function getProperty(req: Request, res: Response): Promise<void> {
   const result = await getPropertyById(req.params.id);
 
@@ -85,4 +98,33 @@ export async function deletePropertyHandler(req: Request, res: Response): Promis
   }
 
   res.status(204).send();
+}
+
+// ─── Availability ─────────────────────────────────────────────────────────────
+
+export async function getAvailability(req: Request, res: Response): Promise<void> {
+  try {
+    const ranges = await getAvailabilityRanges(req.params.id);
+    res.json(ranges);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+}
+
+export async function setAvailability(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const ranges = await setAvailabilityRanges(
+      req.params.id,
+      req.userId!,
+      req.body.ranges,
+    );
+    res.json(ranges);
+  } catch (err) {
+    const message = (err as Error).message;
+    if (message.startsWith('Forbidden') || message === 'Property not found') {
+      res.status(message.startsWith('Forbidden') ? 403 : 404).json({ error: message });
+      return;
+    }
+    res.status(400).json({ error: message });
+  }
 }
