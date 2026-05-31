@@ -7,7 +7,12 @@
  */
 
 import { supabase } from '../config/supabase.js';
+import * as cache from './cache.service.js';
 import type { ServiceResponse } from './index.js';
+
+const TTL_ALL = 60;
+const TTL_ONE = 300;
+const TTL_FEATURED = 120;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +56,9 @@ export interface PropertySearchFilters {
  * Retrieve all properties.
  */
 export async function getAllProperties(): Promise<ServiceResponse<Property[]>> {
+  const cached = await cache.get<Property[]>('properties:all');
+  if (cached) return { success: true, data: cached };
+
   const { data, error } = await supabase
     .from('properties')
     .select('*')
@@ -60,6 +68,7 @@ export async function getAllProperties(): Promise<ServiceResponse<Property[]>> {
     return { success: false, error: error.message };
   }
 
+  await cache.set('properties:all', data, TTL_ALL);
   return { success: true, data: data as Property[] };
 }
 
@@ -73,6 +82,10 @@ export async function getPropertyById(id: string): Promise<ServiceResponse<Prope
     return { success: false, error: 'Property ID is required' };
   }
 
+  const cacheKey = `property:${id}`;
+  const cached = await cache.get<Property>(cacheKey);
+  if (cached) return { success: true, data: cached };
+
   const { data, error } = await supabase
     .from('properties')
     .select('*')
@@ -83,6 +96,7 @@ export async function getPropertyById(id: string): Promise<ServiceResponse<Prope
     return { success: false, error: 'Property not found' };
   }
 
+  await cache.set(cacheKey, data, TTL_ONE);
   return { success: true, data: data as Property };
 }
 
@@ -107,6 +121,11 @@ export async function createProperty(
   if (error) {
     return { success: false, error: error.message };
   }
+
+  await Promise.all([
+    cache.del('properties:all'),
+    cache.del('properties:featured'),
+  ]);
 
   return { success: true, data: data as Property };
 }
@@ -140,6 +159,12 @@ export async function updateProperty(
     return { success: false, error: error.message };
   }
 
+  await Promise.all([
+    cache.del(`property:${id}`),
+    cache.del('properties:all'),
+    cache.del('properties:featured'),
+  ]);
+
   return { success: true, data: data as Property };
 }
 
@@ -159,6 +184,12 @@ export async function deleteProperty(id: string): Promise<ServiceResponse<void>>
     return { success: false, error: error.message };
   }
 
+  await Promise.all([
+    cache.del(`property:${id}`),
+    cache.del('properties:all'),
+    cache.del('properties:featured'),
+  ]);
+
   return { success: true };
 }
 
@@ -170,6 +201,23 @@ export async function deleteProperty(id: string): Promise<ServiceResponse<void>>
  *
  * @param filters - Optional filter criteria.
  */
+export async function getFeaturedProperties(): Promise<ServiceResponse<Property[]>> {
+  const cached = await cache.get<Property[]>('properties:featured');
+  if (cached) return { success: true, data: cached };
+
+  const { data, error } = await supabase
+    .from('properties')
+    .select('*')
+    .eq('status', 'available')
+    .order('created_at', { ascending: false })
+    .limit(12);
+
+  if (error) return { success: false, error: error.message };
+
+  await cache.set('properties:featured', data, TTL_FEATURED);
+  return { success: true, data: data as Property[] };
+}
+
 export async function searchProperties(
   filters: PropertySearchFilters,
 ): Promise<ServiceResponse<Property[]>> {

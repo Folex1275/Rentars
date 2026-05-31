@@ -14,10 +14,16 @@ import {
 
 const router = Router();
 
-// All booking routes require authentication
+// GET /api/v1/bookings/:id
 router.get('/:id', authenticate, getBooking);
+
+// POST /api/v1/bookings
 router.post('/', authenticate, validateBody(createBookingSchema), createBooking);
+
+// PATCH /api/v1/bookings/:id
 router.patch('/:id', authenticate, validateBody(updateBookingSchema), updateBooking);
+
+// DELETE /api/v1/bookings/:id
 router.delete('/:id', authenticate, deleteBooking);
 
 export default router;

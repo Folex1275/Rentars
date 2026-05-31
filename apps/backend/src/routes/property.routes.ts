@@ -7,38 +7,24 @@ import {
   updatePropertyHandler,
 } from '../controllers/property.controller.js';
 import { authenticate } from '../middleware/auth.middleware.js';
+import { upload } from '../middleware/multer.js';
+import { uploadPropertyImage } from '../middleware/upload.middleware.js';
 
 const router = Router();
 
-// ── Public routes ─────────────────────────────────────────────────────────────
+// GET /api/v1/properties
+router.get('/', getProperties);
 
-// GET /api/properties?city=&country=&min_price=&max_price=&amenities=&...
-router.get('/', validateQuery(propertySearchSchema), getProperties);
-
-// GET /api/properties/featured
-router.get('/featured', getFeatured);
-
-// GET /api/properties/:id
+// GET /api/v1/properties/:id
 router.get('/:id', getProperty);
+
+// POST /api/v1/properties
 router.post('/', authenticate, createPropertyHandler);
+
+// PUT /api/v1/properties/:id
 router.put('/:id', authenticate, updatePropertyHandler);
+
+// DELETE /api/v1/properties/:id
 router.delete('/:id', authenticate, deletePropertyHandler);
-
-// PUT /api/properties/:id/availability  (owner sets blocked date ranges)
-const availabilityRangeSchema = z.object({
-  ranges: z.array(
-    z.object({
-      start_date: z.string().date('start_date must be a valid ISO date'),
-      end_date: z.string().date('end_date must be a valid ISO date'),
-    }),
-  ),
-});
-
-router.put(
-  '/:id/availability',
-  authenticate,
-  validateBody(availabilityRangeSchema),
-  setAvailability,
-);
 
 export default router;

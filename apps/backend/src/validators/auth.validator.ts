@@ -4,6 +4,7 @@
 
 import { z } from 'zod';
 import type { NextFunction, Request, Response } from 'express';
+import { StrKey } from '@stellar/stellar-sdk';
 
 // ─── Register schema ──────────────────────────────────────────────────────────
 
@@ -38,6 +39,30 @@ export const loginSchema = z.object({
   password: z
     .string({ required_error: 'password is required' })
     .min(1, 'password is required'),
+});
+
+// ─── Wallet Challenge schema ──────────────────────────────────────────────────
+
+export const walletChallengeSchema = z.object({
+  address: z
+    .string({ required_error: 'address is required' })
+    .refine(
+      (addr) => StrKey.isValidEd25519PublicKey(addr),
+      'address must be a valid Stellar public key',
+    ),
+});
+
+// ─── Wallet Verify schema ─────────────────────────────────────────────────────
+
+export const walletVerifySchema = z.object({
+  address: z
+    .string({ required_error: 'address is required' })
+    .refine(
+      (addr) => StrKey.isValidEd25519PublicKey(addr),
+      'address must be a valid Stellar public key',
+    ),
+  challenge: z.string({ required_error: 'challenge is required' }),
+  signature: z.string({ required_error: 'signature is required' }),
 });
 
 // ─── Middleware factory ───────────────────────────────────────────────────────
