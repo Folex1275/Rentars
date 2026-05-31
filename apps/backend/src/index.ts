@@ -1,11 +1,10 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
-import { errorMiddleware } from './middleware/error.middleware';
-import { rateLimiter } from './middleware/rateLimiter';
-import authRoutes from './routes/auth.routes';
-import bookingRoutes from './routes/booking.routes';
-import propertyRoutes from './routes/property.routes';
+import { errorMiddleware } from './middleware/error.middleware.js';
+import { rateLimiter } from './middleware/rateLimiter.js';
+import { requestLoggingMiddleware } from './middleware/logging.middleware.js';
+import routes from './routes/index.js';
 
 dotenv.config();
 
@@ -21,16 +20,10 @@ app.use(
   })
 );
 app.use(rateLimiter);
+app.use(requestLoggingMiddleware);
 
-// Routes
-app.use('/auth', authRoutes);
-app.use('/api/bookings', bookingRoutes);
-app.use('/api/properties', propertyRoutes);
-
-// Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'Rentars API 🚀' });
-});
+// Centralized routes with versioning
+app.use(routes);
 
 app.use(errorMiddleware);
 
