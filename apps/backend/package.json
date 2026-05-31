@@ -8,7 +8,9 @@
     "dev": "bun run --watch src/index.ts",
     "build": "bun build ./src/index.ts --outdir ./dist",
     "start": "bun run dist/index.js",
-    "test": "bun test"
+    "test": "bun test",
+    "docker:dev": "docker-compose up",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^13.3.0",
