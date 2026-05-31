@@ -40,6 +40,30 @@ export const loginSchema = z.object({
     .min(1, 'password is required'),
 });
 
+// ─── Wallet Challenge schema ──────────────────────────────────────────────────
+
+export const walletChallengeSchema = z.object({
+  stellar_address: z
+    .string({ required_error: 'stellar_address is required' })
+    .regex(/^G[A-Z2-7]{55}$/, 'stellar_address must be a valid Stellar public key'),
+});
+
+// ─── Wallet Verify schema ─────────────────────────────────────────────────────
+
+export const walletVerifySchema = z.object({
+  stellar_address: z
+    .string({ required_error: 'stellar_address is required' })
+    .regex(/^G[A-Z2-7]{55}$/, 'stellar_address must be a valid Stellar public key'),
+
+  challenge: z
+    .string({ required_error: 'challenge is required' })
+    .min(1, 'challenge is required'),
+
+  signature: z
+    .string({ required_error: 'signature is required' })
+    .min(1, 'signature is required'),
+});
+
 // ─── Middleware factory ───────────────────────────────────────────────────────
 
 export function validateBody<T extends z.ZodTypeAny>(schema: T) {
