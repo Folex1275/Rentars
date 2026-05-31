@@ -10,7 +10,10 @@ import {
 
 const router = Router();
 
+// POST /api/v1/auth/register
 router.post('/register', validateBody(registerSchema), register);
+
+// POST /api/v1/auth/login
 router.post('/login', validateBody(loginSchema), login);
 router.post('/wallet/challenge', validateBody(walletChallengeSchema), walletChallenge);
 router.post('/wallet/verify', validateBody(walletVerifySchema), walletVerify);

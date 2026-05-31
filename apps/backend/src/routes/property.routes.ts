@@ -12,33 +12,19 @@ import { uploadPropertyImage } from '../middleware/upload.middleware.js';
 
 const router = Router();
 
-// GET /api/properties?city=&country=&min_price=&max_price=&...
+// GET /api/v1/properties
 router.get('/', getProperties);
 
-// GET /api/properties/:id
+// GET /api/v1/properties/:id
 router.get('/:id', getProperty);
 
-// POST /api/properties
+// POST /api/v1/properties
 router.post('/', authenticate, createPropertyHandler);
 
-// PUT /api/properties/:id
+// PUT /api/v1/properties/:id
 router.put('/:id', authenticate, updatePropertyHandler);
 
-// DELETE /api/properties/:id
+// DELETE /api/v1/properties/:id
 router.delete('/:id', authenticate, deletePropertyHandler);
-
-// POST /api/properties/:id/images - Upload property image
-router.post('/:id/images', authenticate, upload.single('image'), uploadPropertyImage);
-
-// DELETE /api/properties/:id/images/:imageId - Delete property image
-router.delete('/:id/images/:imageId', authenticate, async (req, res) => {
-  try {
-    const { deleteImage } = await import('../config/supabase-storage.js');
-    await deleteImage(req.params.imageId);
-    res.status(204).send();
-  } catch (error) {
-    res.status(400).json({ error: (error as Error).message });
-  }
-});
 
 export default router;
