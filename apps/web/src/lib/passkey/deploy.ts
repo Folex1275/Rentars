@@ -22,7 +22,6 @@ export async function deployStellarSmartWallet(
       networkPassphrase: config.passphrase,
     })
       .addMemo(StellarSdk.Memo.text('Rentars Smart Wallet'))
-      .setDefaultTimeout(30)
       .build();
 
     // Sign the transaction
@@ -30,7 +29,7 @@ export async function deployStellarSmartWallet(
 
     // Submit to network
     const result = await server.submitTransaction(transaction);
-    return result.id;
+    return result.hash;
   } catch (error) {
     throw new Error(`Failed to deploy smart wallet: ${error}`);
   }

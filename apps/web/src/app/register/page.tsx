@@ -39,7 +39,7 @@ export default function RegisterPage() {
     try {
       setError(null);
       // Placeholder for OAuth implementation
-      toast.info(`${provider} signup coming soon`);
+      toast.success(`${provider} signup coming soon`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Social signup failed';
       setError(message);

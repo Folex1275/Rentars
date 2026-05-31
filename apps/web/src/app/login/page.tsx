@@ -39,7 +39,7 @@ export default function LoginPage() {
     try {
       setError(null);
       // Placeholder for OAuth implementation
-      toast.info(`${provider} login coming soon`);
+      toast.success(`${provider} login coming soon`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Social login failed';
       setError(message);

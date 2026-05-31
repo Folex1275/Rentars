@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useAuth } from './use-auth';
+import { useAuth } from '@/hooks/auth/use-auth';
 
 export function useRegister() {
   const { register } = useAuth();

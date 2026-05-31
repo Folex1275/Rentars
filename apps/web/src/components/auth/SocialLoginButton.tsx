@@ -1,6 +1,7 @@
 'use client';
 
-import { Github, Google } from 'lucide-react';
+import { Github } from 'lucide-react';
+import { Mail } from 'lucide-react';
 
 interface SocialLoginButtonProps {
   provider: 'google' | 'github';
@@ -12,7 +13,7 @@ export function SocialLoginButton({ provider, onClick, isLoading = false }: Soci
   const config = {
     google: {
       label: 'Google',
-      icon: Google,
+      icon: Mail,
       bgColor: 'bg-white border border-gray-300 hover:bg-gray-50',
       textColor: 'text-gray-700',
     },

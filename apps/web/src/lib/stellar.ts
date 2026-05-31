@@ -23,8 +23,3 @@ export function getHorizonServer(network: 'testnet' | 'mainnet' = 'testnet') {
   const config = getNetworkConfig(network);
   return new StellarSdk.Horizon.Server(config.horizonUrl);
 }
-
-export function getSorobanRpc(network: 'testnet' | 'mainnet' = 'testnet') {
-  const config = getNetworkConfig(network);
-  return new StellarSdk.SorobanRpc.Server(config.sorobanRpcUrl);
-}
