@@ -6,6 +6,7 @@ import { rateLimiter } from './middleware/rateLimiter';
 import authRoutes from './routes/auth.routes';
 import bookingRoutes from './routes/booking.routes';
 import propertyRoutes from './routes/property.routes';
+import locationRoutes from './routes/location.routes';
 
 dotenv.config();
 
@@ -14,18 +15,20 @@ export const app = express();
 app.use(express.json());
 app.use(
   cors({
-    origin: [process.env.CORS_ORIGIN || 'http://localhost:3001'],
+    origin: [env.CORS_ORIGIN],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   })
 );
 app.use(rateLimiter);
+app.use(requestLoggingMiddleware);
 
 // Routes
 app.use('/auth', authRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/locations', locationRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -37,4 +40,5 @@ app.use(errorMiddleware);
 const PORT = parseInt(process.env.PORT || '3000', 10);
 app.listen(PORT, () => {
   console.log(`🚀 Rentars API running on http://localhost:${PORT}`);
+  startSyncScheduler();
 });

@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - REDIS_URL=redis://redis:6379
+      - CORS_ORIGIN=http://localhost:3001
+      - STELLAR_NETWORK=${STELLAR_NETWORK:-testnet}
+      - STELLAR_RPC_URL=${STELLAR_RPC_URL}
+      - PROPERTY_LISTING_CONTRACT_ID=${PROPERTY_LISTING_CONTRACT_ID}
+      - BOOKING_CONTRACT_ID=${BOOKING_CONTRACT_ID}
+      - TRUSTLESS_WORK_API_URL=${TRUSTLESS_WORK_API_URL}
+      - TRUSTLESS_WORK_API_KEY=${TRUSTLESS_WORK_API_KEY}
+    depends_on:
+      - redis
+    volumes:
+      - .:/app
+      - /app/node_modules
+    networks:
+      - rentars
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - rentars
+
+networks:
+  rentars:
+    driver: bridge
