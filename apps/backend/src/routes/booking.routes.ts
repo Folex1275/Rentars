@@ -4,13 +4,13 @@ import {
   deleteBooking,
   getBooking,
   updateBooking,
-} from '../controllers/booking.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+} from '@/controllers/booking.controller.js';
+import { authenticate } from '@/middleware/auth.middleware.js';
 import {
   createBookingSchema,
   updateBookingSchema,
   validateBody,
-} from '../validators/booking.validator.js';
+} from '@/validators/booking.validator.js';
 
 const router = Router();
 

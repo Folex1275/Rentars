@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
-import { isDomainError } from '../types/errors.js';
-import type { DomainError } from '../types/errors.js';
+import { isDomainError } from '@/types/errors.js';
+import type { DomainError } from '@/types/errors.js';
 
 interface ErrorResponse {
   error: {

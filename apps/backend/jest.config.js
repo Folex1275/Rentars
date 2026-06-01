@@ -19,6 +19,11 @@ export default {
     },
   },
   moduleNameMapper: {
+    '^@/services/(.*)$': '<rootDir>/src/services/$1',
+    '^@/controllers/(.*)$': '<rootDir>/src/controllers/$1',
+    '^@/middleware/(.*)$': '<rootDir>/src/middleware/$1',
+    '^@/blockchain/(.*)$': '<rootDir>/src/blockchain/$1',
+    '^@/types/(.*)$': '<rootDir>/src/types/$1',
     '^@/(.*)$': '<rootDir>/src/$1',
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],

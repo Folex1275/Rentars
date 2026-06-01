@@ -3,10 +3,10 @@ import {
   NETWORK_PASSPHRASE,
   PROPERTY_LISTING_CONTRACT_ID,
   STELLAR_RPC_URL,
-} from '../blockchain/config.js';
-import { BookingClient } from '../blockchain/bookingClient.js';
-import { PropertyListingClient } from '../blockchain/propertyListingClient.js';
-import { supabase } from '../config/supabase.js';
+} from '@/blockchain/config.js';
+import { BookingClient } from '@/blockchain/bookingClient.js';
+import { PropertyListingClient } from '@/blockchain/propertyListingClient.js';
+import { supabase } from '@/config/supabase.js';
 import type { ServiceResponse } from './index.js';
 
 type SyncStatus = 'success' | 'failed' | 'skipped';

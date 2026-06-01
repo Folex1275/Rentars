@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { uploadImage } from '../config/supabase-storage.js';
+import { uploadImage } from '@/config/supabase-storage.js';
 
 export async function uploadPropertyImage(
   req: Request,

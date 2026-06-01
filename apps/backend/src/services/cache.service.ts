@@ -1,4 +1,4 @@
-import { connectRedis, redisClient } from '../config/redis.js';
+import { connectRedis, redisClient } from '@/config/redis.js';
 
 async function ensureConnected(): Promise<void> {
   try {

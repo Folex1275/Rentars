@@ -4,8 +4,8 @@ import {
   getPublicProfileHandler,
   updateProfileHandler,
   updateStellarAddressHandler,
-} from '../controllers/profile.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+} from '@/controllers/profile.controller.js';
+import { authenticate } from '@/middleware/auth.middleware.js';
 
 const router = Router();
 

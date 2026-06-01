@@ -5,14 +5,14 @@
  */
 
 import { StrKey } from '@stellar/stellar-sdk';
-import { supabase } from '../config/supabase.js';
+import { supabase } from '@/config/supabase.js';
 import {
   checkAvailability,
   cancelBookingOnChain,
   createBookingOnChain,
   updateBookingStatusOnChain,
-} from '../blockchain/bookingContract.js';
-import { trustlessWorkClient } from '../blockchain/trustlessWork.js';
+} from '@/blockchain/bookingContract.js';
+import { trustlessWorkClient } from '@/blockchain/trustlessWork.js';
 import { loggingService } from './logging.service.js';
 import type { ServiceResponse } from './index.js';
 

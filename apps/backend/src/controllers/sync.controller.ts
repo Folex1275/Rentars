@@ -4,7 +4,7 @@ import {
   syncAllProperties,
   syncBookingFromChain,
   syncPropertyFromChain,
-} from '../services/sync.service.js';
+} from '@/services/sync.service.js';
 
 export async function syncPropertyHandler(req: Request, res: Response): Promise<void> {
   const { id } = req.params;

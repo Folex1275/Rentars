@@ -6,7 +6,15 @@
     "strict": true,
     "esModuleInterop": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@/services/*": ["./src/services/*"],
+      "@/controllers/*": ["./src/controllers/*"],
+      "@/middleware/*": ["./src/middleware/*"],
+      "@/blockchain/*": ["./src/blockchain/*"],
+      "@/types/*": ["./src/types/*"]
+    }
   },
   "include": ["src/**/*"]
 }
