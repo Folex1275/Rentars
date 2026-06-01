@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/auth/use-auth';
 import { WalletAuthButton } from '@/components/auth/WalletAuthButton';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
+import NotificationBell from '@/components/shared/NotificationBell';
 import { House, Menu, X, LogOut, User } from 'lucide-react';
 
 export function Navbar() {
@@ -47,6 +48,7 @@ export function Navbar() {
 
             {user ? (
               <div className="hidden md:flex items-center gap-3">
+                <NotificationBell userId={user.id} />
                 <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg">
                   <User size={18} className="text-gray-600 dark:text-gray-300" />
                   <span className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</span>

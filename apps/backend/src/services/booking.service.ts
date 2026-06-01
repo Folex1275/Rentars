@@ -14,6 +14,7 @@ import {
 } from '../blockchain/bookingContract.js';
 import { trustlessWorkClient } from '../blockchain/trustlessWork.js';
 import { loggingService } from './logging.service.js';
+import { createNotification } from './notification.service.js';
 import type { ServiceResponse } from './index.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -303,6 +304,9 @@ export class BookingService {
 
     const booking = bookingData as Booking;
 
+    // Notify tenant
+    createNotification(tenant_id, 'booking_created', { booking_id: booking.id, property_id }).catch(() => {});
+
     // 7. Create on-chain booking record (non-fatal on failure)
     if (prop.on_chain_id !== undefined && prop.on_chain_id !== null) {
       const checkInTs = BigInt(Math.floor(checkInDate.getTime() / 1000));
@@ -421,6 +425,11 @@ export class BookingService {
       return { success: false, error: updateError.message };
     }
 
+    // Notify tenant
+    if (booking.tenant_id) {
+      createNotification(booking.tenant_id, 'booking_cancelled', { booking_id: bookingId }).catch(() => {});
+    }
+
     // Update on-chain status (non-fatal)
     if (booking.on_chain_id !== undefined && booking.on_chain_id !== null) {
       const callerAddress = await fetchStellarAddress(userId);
@@ -525,6 +534,11 @@ export class BookingService {
 
     if (updateError) {
       return { success: false, error: updateError.message };
+    }
+
+    // Notify tenant
+    if (booking.tenant_id) {
+      createNotification(booking.tenant_id, 'booking_confirmed', { booking_id: bookingId }).catch(() => {});
     }
 
     // Update on-chain status (non-fatal)
