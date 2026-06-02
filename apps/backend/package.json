@@ -39,6 +39,8 @@
     "bun-types": "latest",
     "supertest": "^6.3.3",
     "@types/supertest": "^2.0.12",
-    "vitest": "^1.0.4"
+    "vitest": "^1.0.4",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.0"
   }
 }

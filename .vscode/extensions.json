@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "rust-lang.rust-analyzer",
+    "bradlc.vscode-tailwindcss",
+    "ms-vscode.vscode-typescript-next",
+    "Prisma.prisma",
+    "ms-azuretools.vscode-docker"
+  ]
+}

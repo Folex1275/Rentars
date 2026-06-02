@@ -4,8 +4,8 @@ import {
   registerUser,
   generateWalletChallenge,
   verifyWalletChallenge,
-} from '../services/auth.service.js';
-import { AuthError } from '../types/errors.js';
+} from '@/services/auth.service.js';
+import { AuthError } from '@/types/errors.js';
 
 export async function register(req: Request, res: Response): Promise<void> {
   try {

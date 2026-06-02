@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { WalletAuthService } from '../services/wallet.service.js';
+import { WalletAuthService } from '@/services/wallet.service.js';
 
 const walletAuthService = new WalletAuthService();
 

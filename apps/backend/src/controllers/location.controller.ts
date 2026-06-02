@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { LocationService } from '../services/location.service.js';
+import { LocationService } from '@/services/location.service.js';
 
 const locationService = new LocationService();
 

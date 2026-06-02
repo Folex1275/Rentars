@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend (Bun)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--inspect", "src/index.ts"],
+      "cwd": "${workspaceFolder}/apps/backend",
+      "env": { "NODE_ENV": "development" }
+    },
+    {
+      "name": "Frontend (Next.js)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "yarn",
+      "runtimeArgs": ["dev"],
+      "cwd": "${workspaceFolder}/apps/web",
+      "serverReadyAction": {
+        "pattern": "ready on",
+        "uriFormat": "http://localhost:3001"
+      }
+    }
+  ]
+}

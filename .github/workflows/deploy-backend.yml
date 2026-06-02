@@ -1,0 +1,51 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-backend:
+    name: Deploy backend service
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Fly CLI
+        uses: superfly/flyctl-actions@v1
+        with:
+          version: latest
+
+      - name: Deploy backend to Fly.io
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          flyctl deploy \
+            --app "${{ secrets.FLY_APP_NAME }}" \
+            --dockerfile ./apps/backend/Dockerfile \
+            --remote-only
+
+      - name: Run database migrations
+        if: ${{ secrets.DATABASE_URL != '' }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          psql "$DATABASE_URL" -f apps/backend/database/setup.sql
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Smoke test backend health endpoint
+        if: ${{ secrets.BACKEND_HEALTH_URL != '' }}
+        env:
+          BACKEND_HEALTH_URL: ${{ secrets.BACKEND_HEALTH_URL }}
+        run: |
+          curl --fail --retry 5 --retry-delay 3 "$BACKEND_HEALTH_URL/health"

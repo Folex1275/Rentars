@@ -1,7 +1,7 @@
 'use client';
 
 import { useProperties } from '@/hooks/useProperties';
-import PropertyGrid from '../components/search/PropertyGrid';
+import PropertyGrid from '@/components/search/PropertyGrid';
 
 export default function Home() {
   const { properties, isLoading, error } = useProperties();

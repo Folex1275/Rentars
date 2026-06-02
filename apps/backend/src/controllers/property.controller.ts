@@ -6,7 +6,7 @@ import {
   getPropertyById,
   searchProperties,
   updateProperty,
-} from '../services/property.service.js';
+} from '@/services/property.service.js';
 
 export async function getProperties(req: Request, res: Response): Promise<void> {
   // If any search filter query params are present, delegate to searchProperties

@@ -6,8 +6,8 @@
 
 import jwt from 'jsonwebtoken';
 import { Keypair, TransactionBuilder, Networks, BASE_FEE } from '@stellar/stellar-sdk';
-import { supabase } from '../config/supabase.js';
-import { AuthError, AuthErrorCode } from '../types/errors.js';
+import { supabase } from '@/config/supabase.js';
+import { AuthError, AuthErrorCode } from '@/types/errors.js';
 import type { ServiceResponse } from './index.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
