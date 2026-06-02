@@ -5,7 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import SearchBar from '@/components/features/search/SearchBar';
 import FilterSidebar, { type FilterState } from '@/components/search/FilterSidebar';
 import SortOptions from '@/components/search/SortOptions';
-import SearchMap from '@/components/search/Map';
+import PropertyMap from '@/components/search/PropertyMap';
+
 import PropertyGrid from '@/components/search/PropertyGrid';
 import { useProperties } from '@/hooks/useProperties';
 
@@ -62,25 +63,42 @@ export default function SearchPage() {
             </span>
             <SortOptions onSortChange={setSortBy} currentSort={sortBy} />
           </div>
-          <button
-            onClick={() => setShowMap(!showMap)}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm font-semibold"
-          >
-            {showMap ? 'Hide Map' : 'Show Map'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowMap(false)}
+              className={`px-4 py-2 border rounded-lg text-sm font-semibold transition ${
+                !showMap ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'
+              }`}
+            >
+              List
+            </button>
+            <button
+              onClick={() => setShowMap(true)}
+              className={`px-4 py-2 border rounded-lg text-sm font-semibold transition ${
+                showMap ? 'bg-blue-600 text-white border-blue-600' : 'bg-white hover:bg-gray-50'
+              }`}
+            >
+              Map
+            </button>
+
+          </div>
         </div>
 
         {/* Map View */}
         {showMap && (
           <div className="mb-8">
-            <SearchMap
+            <PropertyMap
               properties={properties}
+
               onPropertyClick={(id) => {
                 window.location.href = `/property/${id}`;
               }}
+              onBoundsChanged={() => {}}
+
             />
           </div>
         )}
+
 
         {/* Filters and Results */}
         <div className="grid grid-cols-4 gap-8">

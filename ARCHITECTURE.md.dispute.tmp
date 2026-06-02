@@ -1,0 +1,58 @@
+# Rentars Architecture
+
+This document provides a comprehensive overview of the Rentars system design, data flow, and technology decisions.
+
+---
+
+## System Overview
+
+Rentars is a decentralized peer-to-peer rental platform built on the Stellar blockchain. The system connects property owners and tenants through a modern web interface, REST API, and Soroban smart contracts.
+
+---
+
+## Dispute Resolution Flow
+
+Rentars supports booking dispute resolution where either the tenant or the property owner can raise a dispute on an active booking.
+
+### Booking dispute state machine
+
+- `none` → `raised` → `resolved`
+
+Implementation note: the `bookings.dispute_status` column is persisted in Supabase.
+
+### Raising a dispute
+
+- **Endpoint:** `POST /api/v1/bookings/:id/dispute`
+- **Caller:** authenticated tenant OR owner (depending on booking relationship)
+- **Request body:** `{ reason: string }`
+- **Behavior:**
+  - Validates booking exists and is in `none` state
+  - Updates `bookings.dispute_status` to `raised`
+  - Freezes escrow by preventing release/cancellation flows (see below)
+  - Sends notifications to both parties
+
+### Resolving a dispute (admin only)
+
+- **Endpoint:** `POST /api/v1/bookings/:id/dispute/resolve`
+- **Caller:** admin
+- **Request body:** `{ reason: string }`
+- **Behavior:**
+  - Validates booking exists and is currently `raised`
+  - Updates `bookings.dispute_status` to `resolved`
+  - Sends notifications to both parties
+
+### Escrow interaction (freezing)
+
+When a booking has `dispute_status = raised`, escrow release/cancellation actions must be treated as blocked until the dispute is resolved.
+
+### Notifications
+
+When a dispute is raised or resolved, the system creates notifications for:
+- the tenant
+- the property owner
+
+### API contracts
+
+- `POST /api/v1/bookings/:id/dispute`
+- `POST /api/v1/bookings/:id/dispute/resolve`
+

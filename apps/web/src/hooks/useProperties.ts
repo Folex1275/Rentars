@@ -13,7 +13,16 @@ export interface PropertyFilters {
   guests?: number;
   propertyType?: string;
   sortBy?: string;
+
+  // Map bounds
+  bounds?: {
+    west: number;
+    south: number;
+    east: number;
+    north: number;
+  };
 }
+
 
 export function useProperties(filters?: PropertyFilters) {
   const [properties, setProperties] = useState<Property[]>([]);
@@ -30,7 +39,15 @@ export function useProperties(filters?: PropertyFilters) {
     if (filters?.propertyType) params.append('type', filters.propertyType);
     if (filters?.sortBy) params.append('sort', filters.sortBy);
 
+    if (filters?.bounds) {
+      params.append('west', filters.bounds.west.toString());
+      params.append('south', filters.bounds.south.toString());
+      params.append('east', filters.bounds.east.toString());
+      params.append('north', filters.bounds.north.toString());
+    }
+
     const url = `${API_URL}/api/properties${params.toString() ? `?${params.toString()}` : ''}`;
+
 
     fetch(url)
       .then((r) => r.json())

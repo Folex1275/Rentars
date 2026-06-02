@@ -8,4 +8,9 @@ export interface Property {
   owner_id: string;
   available: boolean;
   created_at: string;
+
+  // Map search support
+  lat?: number;
+  lng?: number;
 }
+
