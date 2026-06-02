@@ -6,6 +6,7 @@ import {
   getProperty,
   updatePropertyHandler,
 } from '@/controllers/property.controller.js';
+import { searchPropertiesEndpoint } from '@/controllers/propertySearch.controller.js';
 import { authenticate } from '@/middleware/auth.middleware.js';
 import { upload } from '@/middleware/multer.js';
 import { uploadPropertyImage } from '@/middleware/upload.middleware.js';
@@ -14,6 +15,9 @@ const router = Router();
 
 // GET /api/v1/properties
 router.get('/', getProperties);
+
+// GET /api/v1/properties/search?q=...
+router.get('/search', searchPropertiesEndpoint);
 
 // GET /api/v1/properties/:id
 router.get('/:id', getProperty);
@@ -28,3 +32,4 @@ router.put('/:id', authenticate, updatePropertyHandler);
 router.delete('/:id', authenticate, deletePropertyHandler);
 
 export default router;
+

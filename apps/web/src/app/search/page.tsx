@@ -9,6 +9,7 @@ import PropertyMap from '@/components/search/PropertyMap';
 
 import PropertyGrid from '@/components/search/PropertyGrid';
 import { useProperties } from '@/hooks/useProperties';
+import { usePropertySearch } from '@/hooks/usePropertySearch';
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
@@ -22,7 +23,15 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState('recommended');
   const [showMap, setShowMap] = useState(false);
 
-  const { properties, isLoading, error } = useProperties({
+  const q = searchParams.get('q') || searchParams.get('location') || undefined;
+
+  const {
+    properties: searched,
+    isLoading: isSearching,
+    error: searchError,
+  } = usePropertySearch(q);
+
+  const { properties: filtered, isLoading: isFiltering, error } = useProperties({
     location: searchParams.get('location') || undefined,
     priceMin: filters.priceMin,
     priceMax: filters.priceMax,
@@ -32,6 +41,11 @@ export default function SearchPage() {
     sortBy,
   });
 
+  const properties = q ? searched : filtered;
+  const isLoading = q ? isSearching : isFiltering;
+  const apiError = q ? searchError : error;
+
+
   useEffect(() => {
     const location = searchParams.get('location');
     if (location) {
@@ -39,11 +53,12 @@ export default function SearchPage() {
     }
   }, [searchParams]);
 
-  const handleSearch = (location: string) => {
+  const handleSearch = (q: string) => {
     const params = new URLSearchParams();
-    params.set('location', location);
+    params.set('q', q);
     window.history.pushState(null, '', `/search?${params.toString()}`);
   };
+
 
   return (
     <main className="min-h-screen bg-gray-50">
@@ -108,7 +123,8 @@ export default function SearchPage() {
 
           <div className="col-span-3">
             {isLoading && <p className="text-gray-400">Loading properties...</p>}
-            {error && <p className="text-red-500">{error}</p>}
+            {apiError && <p className="text-red-500">{apiError}</p>}
+
             {!isLoading && properties.length === 0 && (
               <p className="text-gray-500">No properties found. Try adjusting your filters.</p>
             )}

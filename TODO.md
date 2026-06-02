@@ -4,6 +4,8 @@
 - [x] Backend: add dispute raise/resolve methods in `apps/backend/src/services/booking.service.ts`
 - [x] Backend: add notification types + notify both parties on raise/resolve
 - [ ] Backend: add routes/controllers for `POST /api/v1/bookings/:id/dispute` and `POST /api/v1/bookings/:id/dispute/resolve`
+
+
 - [x] Backend: add validators for dispute request bodies
 - [ ] Frontend: create `apps/web/src/components/booking/DisputeButton.tsx`
 - [ ] Frontend: create `apps/web/src/components/booking/DisputeModal.tsx`
