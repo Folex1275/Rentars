@@ -12,6 +12,20 @@ export interface BlockchainOperationLog {
 }
 
 class LoggingService {
+  /**
+   * Persist a blockchain operation log to Supabase and emit a console message.
+   *
+   * Both successful operations and errors are recorded. On a DB failure the log
+   * is still printed to the console so no diagnostic information is silently lost.
+   *
+   * @param operation - Name of the operation (e.g. 'createEscrow', 'cancelBookingOnChain')
+   * @param input - Arbitrary key/value context associated with the operation
+   * @param result - Optional result payload returned by the operation
+   * @param error - Optional error message when the operation failed
+   * @example
+   * loggingService.logBlockchainOperation('createEscrow', { propertyId, userId }, { escrowId });
+   * loggingService.logBlockchainOperation('cancelEscrow', { bookingId }, undefined, err.message);
+   */
   async logBlockchainOperation(
     operation: string,
     input: Record<string, unknown>,

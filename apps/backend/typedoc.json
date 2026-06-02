@@ -1,0 +1,12 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["src/services", "src/blockchain"],
+  "entryPointStrategy": "expand",
+  "out": "docs",
+  "name": "Rentars Backend API Docs",
+  "includeVersion": true,
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeProtected": false,
+  "excludeExternals": true
+}

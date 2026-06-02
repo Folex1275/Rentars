@@ -31,6 +31,16 @@ function buildBookingClient(): BookingClient {
   return new BookingClient(BOOKING_CONTRACT_ID, STELLAR_RPC_URL, NETWORK_PASSPHRASE);
 }
 
+/**
+ * Sync a single property from the blockchain to Supabase.
+ *
+ * Reads the on-chain listing by its property ID and updates the corresponding
+ * row in the properties table with the latest title, description, price, and status.
+ *
+ * @param propertyId - On-chain property ID (u64 as a string)
+ * @returns ServiceResponse indicating success or failure
+ * @throws Does not throw; errors are returned in the ServiceResponse
+ */
 export async function syncPropertyFromChain(
   propertyId: string,
 ): Promise<ServiceResponse<void>> {
@@ -67,6 +77,12 @@ export async function syncPropertyFromChain(
   }
 }
 
+/**
+ * Sync a single booking from the blockchain to Supabase.
+ *
+ * @param bookingId - On-chain booking ID (u64 as a string)
+ * @returns ServiceResponse indicating success or failure
+ */
 export async function syncBookingFromChain(
   bookingId: string,
 ): Promise<ServiceResponse<void>> {
@@ -101,6 +117,15 @@ export async function syncBookingFromChain(
   }
 }
 
+/**
+ * Sync every on-chain property listing to Supabase in sequential order.
+ * Iterates from ID 1 to the current listing count.
+ *
+ * @returns ServiceResponse with counts of synced and failed properties
+ * @example
+ * const result = await syncAllProperties();
+ * console.log(`Synced: ${result.data.synced}, Failed: ${result.data.failed}`);
+ */
 export async function syncAllProperties(): Promise<ServiceResponse<{ synced: number; failed: number }>> {
   if (!PROPERTY_LISTING_CONTRACT_ID) {
     return { success: false, error: 'PROPERTY_LISTING_CONTRACT_ID is not configured' };
@@ -124,6 +149,12 @@ export async function syncAllProperties(): Promise<ServiceResponse<{ synced: num
   }
 }
 
+/**
+ * Sync every on-chain booking to Supabase in sequential order.
+ * Iterates from ID 1 to the current booking count.
+ *
+ * @returns ServiceResponse with counts of synced and failed bookings
+ */
 export async function syncAllBookings(): Promise<ServiceResponse<{ synced: number; failed: number }>> {
   if (!BOOKING_CONTRACT_ID) {
     return { success: false, error: 'BOOKING_CONTRACT_ID is not configured' };

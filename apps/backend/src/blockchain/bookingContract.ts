@@ -41,6 +41,12 @@ function requireContractId(): void {
  * Check whether a property is available for the given date range.
  *
  * Dates are passed as Unix timestamps (seconds).
+ *
+ * @param propertyId - On-chain u64 property ID
+ * @param startDate - Check-in as Unix timestamp (seconds)
+ * @param endDate - Check-out as Unix timestamp (seconds)
+ * @returns true if the property is available, false if already booked
+ * @throws ContractError if BOOKING_CONTRACT_ID is not configured or the call fails
  */
 export async function checkAvailability(
   propertyId: bigint,

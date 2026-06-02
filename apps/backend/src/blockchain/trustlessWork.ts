@@ -94,6 +94,10 @@ export class TrustlessWorkClient {
 
   /**
    * Create a new USDC escrow for a booking.
+   *
+   * @param params - Escrow creation parameters
+   * @returns CreateEscrowResponse containing escrowId, contractId, and status
+   * @throws EscrowError on non-2xx API responses
    */
   async createEscrow(params: CreateEscrowRequest): Promise<CreateEscrowResponse> {
     return this.request<CreateEscrowResponse>('POST', '/escrows', params);
@@ -101,6 +105,11 @@ export class TrustlessWorkClient {
 
   /**
    * Fund an existing escrow after the buyer has sent USDC on-chain.
+   *
+   * @param escrowId - ID of the escrow to fund
+   * @param amount - USDC amount string
+   * @param txHash - On-chain transaction hash of the funding transfer
+   * @throws EscrowError on non-2xx API responses
    */
   async fundEscrow(escrowId: string, amount: string, txHash: string): Promise<void> {
     const body: FundEscrowRequest = { escrowId, amount, txHash };
@@ -108,7 +117,11 @@ export class TrustlessWorkClient {
   }
 
   /**
-   * Release escrowed funds to the seller.
+   * Release escrowed funds to the seller (property owner).
+   *
+   * @param escrowId - ID of the escrow to release
+   * @param reason - Human-readable reason for the release
+   * @throws EscrowError on non-2xx API responses
    */
   async releaseEscrow(escrowId: string, reason: string): Promise<void> {
     const body: ReleaseEscrowRequest = { escrowId, reason };
@@ -116,7 +129,10 @@ export class TrustlessWorkClient {
   }
 
   /**
-   * Cancel the escrow and return funds to the buyer.
+   * Cancel the escrow and return funds to the buyer (tenant).
+   *
+   * @param escrowId - ID of the escrow to cancel
+   * @throws EscrowError on non-2xx API responses
    */
   async cancelEscrow(escrowId: string): Promise<void> {
     await this.request<void>('POST', `/escrows/${escrowId}/cancel`);
@@ -124,6 +140,10 @@ export class TrustlessWorkClient {
 
   /**
    * Retrieve the current status of an escrow.
+   *
+   * @param escrowId - ID of the escrow to query
+   * @returns EscrowStatus with amounts, participants, and current state
+   * @throws EscrowError on non-2xx API responses
    */
   async getEscrowStatus(escrowId: string): Promise<EscrowStatus> {
     return this.request<EscrowStatus>('GET', `/escrows/${escrowId}`);
@@ -132,6 +152,16 @@ export class TrustlessWorkClient {
   /**
    * Create an escrow from structured booking parameters, setting a
    * human-readable title and relevant metadata automatically.
+   *
+   * @param params - Booking-specific parameters (propertyId, bookingId, buyer/seller addresses, amount, dates)
+   * @returns CreateEscrowResponse containing escrowId, contractId, and status
+   * @throws EscrowError on non-2xx API responses
+   * @example
+   * const resp = await trustlessWorkClient.createBookingEscrow({
+   *   propertyId: 'prop-1', bookingId: 'book-1',
+   *   buyerAddress: 'G...', sellerAddress: 'G...',
+   *   amountUsdc: '100', checkIn: '2025-07-01', checkOut: '2025-07-07',
+   * });
    */
   async createBookingEscrow(params: BookingEscrowParams): Promise<CreateEscrowResponse> {
     return this.createEscrow({

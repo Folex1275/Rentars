@@ -39,6 +39,9 @@ export interface OnChainPropertyData {
 /**
  * Serialise the canonical subset of property fields to a deterministic JSON
  * string for hashing. Keys are always sorted alphabetically.
+ *
+ * @param property - Property record (any extra keys are ignored)
+ * @returns Deterministic JSON string of the canonical fields
  */
 export function propertyToHashData(property: Record<string, unknown>): string {
   const CANONICAL_FIELDS = [
@@ -72,6 +75,10 @@ function computeSha256(data: string): string {
 
 /**
  * Fetch the on-chain hash record for a property.
+ *
+ * @param id - Supabase property UUID used as the on-chain identifier
+ * @returns On-chain property data including owner address, data hash, and listing status
+ * @throws ContractError if PROPERTY_LISTING_CONTRACT_ID is not configured or the call fails
  */
 export async function getPropertyListing(id: string): Promise<OnChainPropertyData> {
   if (!PROPERTY_LISTING_CONTRACT_ID) {
@@ -113,6 +120,11 @@ export async function getPropertyListing(id: string): Promise<OnChainPropertyDat
 
 /**
  * Register a property's data-hash on-chain.
+ *
+ * @param id - Supabase property UUID
+ * @param dataHash - SHA-256 hex hash of the canonical property data
+ * @param ownerAddress - Stellar public key of the property owner
+ * @throws ContractError if PROPERTY_LISTING_CONTRACT_ID is not configured or submission fails
  */
 export async function createPropertyListing(
   id: string,
@@ -142,6 +154,11 @@ export async function createPropertyListing(
 
 /**
  * Update the stored data-hash for a property.
+ *
+ * @param id - Supabase property UUID
+ * @param dataHash - New SHA-256 hex hash of updated canonical property data
+ * @param ownerAddress - Stellar public key of the property owner
+ * @throws ContractError if PROPERTY_LISTING_CONTRACT_ID is not configured or submission fails
  */
 export async function updatePropertyListing(
   id: string,
@@ -171,6 +188,11 @@ export async function updatePropertyListing(
 
 /**
  * Update the status of a property listing on-chain.
+ *
+ * @param id - Supabase property UUID
+ * @param ownerAddress - Stellar public key of the property owner
+ * @param status - New listing status ('Active', 'Inactive', etc.)
+ * @throws ContractError if PROPERTY_LISTING_CONTRACT_ID is not configured or submission fails
  */
 export async function updatePropertyStatus(
   id: string,
@@ -205,6 +227,14 @@ export async function updatePropertyStatus(
  *
  * Returns true when the hashes match, false when they diverge (indicating
  * the off-chain record may have been mutated outside the normal update flow).
+ *
+ * @param id - Supabase property UUID
+ * @param localData - Current local property record from Supabase
+ * @returns true if hashes match, false if tamper detected
+ * @throws ContractError if the on-chain lookup fails
+ * @example
+ * const isValid = await verifyPropertyIntegrity(property.id, property);
+ * if (!isValid) console.warn('Property data has been tampered with!');
  */
 export async function verifyPropertyIntegrity(
   id: string,

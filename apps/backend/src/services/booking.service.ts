@@ -96,6 +96,17 @@ export class BookingService {
 
   // ── Read ───────────────────────────────────────────────────────────────────
 
+  /**
+   * Retrieve a booking by its ID.
+   *
+   * @param id - UUID of the booking
+   * @returns ServiceResponse with the booking data, or error if not found
+   * @example
+   * const result = await bookingService.getBookingById('f47ac10b-58cc-4372-a567-0e02b2c3d479');
+   * if (result.success) {
+   *   console.log(result.data.status); // 'Pending', 'Confirmed', etc.
+   * }
+   */
   async getBookingById(id: string): Promise<ServiceResponse<Booking>> {
     if (!id) {
       return { success: false, error: 'Booking ID is required' };
@@ -575,6 +586,14 @@ export class BookingService {
 
   // ── Update / Delete ────────────────────────────────────────────────────────
 
+  /**
+   * Update mutable fields of an existing booking.
+   *
+   * @param id - UUID of the booking
+   * @param payload - Partial booking fields to update
+   * @returns ServiceResponse with the updated booking
+   * @throws Does not throw; errors are returned in the ServiceResponse
+   */
   async updateBooking(
     id: string,
     payload: Partial<Booking>,
@@ -601,6 +620,12 @@ export class BookingService {
     return { success: true, data: data as Booking };
   }
 
+  /**
+   * Permanently delete a booking record.
+   *
+   * @param id - UUID of the booking to delete
+   * @returns ServiceResponse with no data on success
+   */
   async deleteBooking(id: string): Promise<ServiceResponse<void>> {
     if (!id) {
       return { success: false, error: 'Booking ID is required' };
