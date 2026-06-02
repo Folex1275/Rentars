@@ -1,5 +1,9 @@
 # Rentars
 
+![Backend CI](https://github.com/Rentars/Rentars/actions/workflows/backend-ci.yml/badge.svg)
+![Frontend CI](https://github.com/Rentars/Rentars/actions/workflows/frontend-ci.yml/badge.svg)
+[![codecov](https://codecov.io/gh/Rentars/Rentars/graph/badge.svg)](https://codecov.io/gh/Rentars/Rentars)
+
 > Decentralized peer-to-peer rental platform built on the [Stellar](https://stellar.org) blockchain.
 
 Rentars is a fork/evolution of [StellarRent](https://github.com/Stellar-Rent/stellar-rent), rebranded and scaffolded as **Rentars**. It inherits the same mission: eliminate rental intermediaries (Airbnb, agencies) by leveraging Stellar's fast transactions (~3–5s), near-zero fees (~$0.000001), and Soroban smart contracts for trustless escrow.
@@ -150,6 +154,33 @@ cd apps/contracts
 cargo build --target wasm32-unknown-unknown --release
 ```
 
+### 5. Full-Stack Docker (Optional)
+
+Run the entire stack (frontend, API, Redis) with Docker Compose:
+
+```bash
+# Copy env files first
+cp apps/backend/.env.example apps/backend/.env
+cp apps/web/.env.example apps/web/.env.local
+
+# Start all services (uses docker-compose.override.yml for dev volumes)
+yarn dev:docker
+```
+
+| Service | URL | Port |
+|---|---|---|
+| Frontend (web) | http://localhost:3001 | 3001 |
+| Backend (api) | http://localhost:3000 | 3000 |
+| Redis | redis://localhost:6379 | 6379 |
+
+Each service includes a health check. The override file mounts source code for hot-reload during development.
+
+Production-style startup (without dev overrides):
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
+
 ---
 
 ## API Reference
@@ -222,14 +253,24 @@ This is a **10% scaffold** of the full Rentars platform. The following is implem
 - [ ] Map-based property search
 - [ ] Booking calendar UI
 - [ ] Blockchain sync service
-- [ ] Docker setup
-- [ ] CI/CD pipeline
+- [x] Docker setup
+- [x] CI/CD pipeline
 
 ---
 
 ## Contributing
 
 Contributions are welcome! This project is inspired by and derived from [StellarRent](https://github.com/Stellar-Rent/stellar-rent), an open-source project built with the [OnlyDust](https://app.onlydust.com) community.
+
+### CI/CD
+
+| Workflow | Trigger | Purpose |
+|---|---|---|
+| `backend-ci.yml` | Push/PR to `main` | Biome, TypeScript, Bun tests |
+| `frontend-ci.yml` | Push/PR to `main` | Biome, TypeScript, Vitest, Next.js build |
+| `coverage.yml` | Push/PR to `main` | Coverage reports uploaded to [Codecov](https://codecov.io) |
+
+Repository maintainers must add `CODECOV_TOKEN` as a GitHub Actions secret for coverage uploads.
 
 1. Fork the repo
 2. Create a feature branch: `git checkout -b feat/your-feature`

@@ -1,0 +1,23 @@
+# Development overrides — applied automatically with `docker compose up`
+services:
+  web:
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev -- -p 3001
+
+  api:
+    volumes:
+      - ./apps/backend:/app
+      - /app/node_modules
+    command: bun run --watch src/index.ts
+    ports:
+      - '3000:3000'
+      - '9229:9229'
+    environment:
+      - NODE_ENV=development
+
+  redis:
+    ports:
+      - '6379:6379'

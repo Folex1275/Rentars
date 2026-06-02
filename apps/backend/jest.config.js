@@ -10,6 +10,8 @@ export default {
     '!src/index.ts',
     '!src/blockchain/**',
   ],
+  coverageDirectory: 'coverage',
+  coverageReporters: ['text', 'lcov'],
   coverageThreshold: {
     global: {
       branches: 70,
