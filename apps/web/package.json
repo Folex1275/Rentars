@@ -12,7 +12,7 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
-    "@radix-ui/react-slot": "^2.0.2",
+    "@radix-ui/react-slot": "^1.2.4",
     "@stellar/freighter-api": "^4.1.0",
     "@stellar/stellar-sdk": "^13.3.0",
     "@supabase/supabase-js": "^2.39.0",
