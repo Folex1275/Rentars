@@ -7,18 +7,17 @@ import {
   walletChallengeSchema,
   walletVerifySchema,
   validateBody,
-  walletChallengeSchema,
-  walletVerifySchema,
 } from '@/validators/auth.validator.js';
+import { authRateLimiter } from '@/middleware/rateLimiter.js';
 
 const router = Router();
 
 // POST /api/v1/auth/register
-router.post('/register', validateBody(registerSchema), register);
+router.post('/register', authRateLimiter, validateBody(registerSchema), register);
 
 // POST /api/v1/auth/login
-router.post('/login', validateBody(loginSchema), login);
-router.post('/wallet/challenge', validateBody(walletChallengeSchema), walletChallenge);
-router.post('/wallet/verify', validateBody(walletVerifySchema), walletVerify);
+router.post('/login', authRateLimiter, validateBody(loginSchema), login);
+router.post('/wallet/challenge', authRateLimiter, validateBody(walletChallengeSchema), walletChallenge);
+router.post('/wallet/verify', authRateLimiter, validateBody(walletVerifySchema), walletVerify);
 
 export default router;

@@ -6,6 +6,7 @@ import {
   updateBooking,
 } from '@/controllers/booking.controller.js';
 import { authenticate } from '@/middleware/auth.middleware.js';
+import { bookingRateLimiter } from '@/middleware/rateLimiter.js';
 import {
   createBookingSchema,
   updateBookingSchema,
@@ -18,7 +19,7 @@ const router = Router();
 router.get('/:id', authenticate, getBooking);
 
 // POST /api/v1/bookings
-router.post('/', authenticate, validateBody(createBookingSchema), createBooking);
+router.post('/', authenticate, bookingRateLimiter, validateBody(createBookingSchema), createBooking);
 
 // PATCH /api/v1/bookings/:id
 router.patch('/:id', authenticate, validateBody(updateBookingSchema), updateBooking);
