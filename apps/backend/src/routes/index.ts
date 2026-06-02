@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { supabase } from '../config/supabase.js';
+import { supabase } from '@/config/supabase.js';
 import authRoutes from './auth.routes.js';
 import bookingRoutes from './booking.routes.js';
 import propertyRoutes from './property.routes.js';

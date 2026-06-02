@@ -1,6 +1,6 @@
 import { Keypair, StrKey } from '@stellar/stellar-sdk';
 import jwt from 'jsonwebtoken';
-import { supabase } from '../config/supabase.js';
+import { supabase } from '@/config/supabase.js';
 import type { ServiceResponse } from './index.js';
 
 export interface ChallengeResponse {

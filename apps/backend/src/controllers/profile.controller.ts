@@ -1,11 +1,11 @@
 import type { Request, Response } from 'express';
-import type { AuthRequest } from '../middleware/auth.middleware.js';
+import type { AuthRequest } from '@/middleware/auth.middleware.js';
 import {
   getProfile,
   getPublicProfile,
   updateProfile,
   updateStellarAddress,
-} from '../services/profile.service.js';
+} from '@/services/profile.service.js';
 
 export async function getOwnProfileHandler(req: AuthRequest, res: Response): Promise<void> {
   const result = await getProfile(req.userId!);

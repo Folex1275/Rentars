@@ -4,8 +4,8 @@ import {
   syncAllPropertiesHandler,
   syncBookingHandler,
   syncPropertyHandler,
-} from '../controllers/sync.controller.js';
-import { authenticate } from '../middleware/auth.middleware.js';
+} from '@/controllers/sync.controller.js';
+import { authenticate } from '@/middleware/auth.middleware.js';
 
 const router = Router();
 

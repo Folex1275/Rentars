@@ -1,75 +1,84 @@
 # Contributing to Rentars
 
-## Prerequisites
+## Getting Started
 
-- [Bun](https://bun.sh) >= 1.0
-- [Node.js](https://nodejs.org) >= 20
-- [Yarn](https://yarnpkg.com) >= 1.22
+1. Fork the repository
+2. Clone your fork: `git clone https://github.com/yourusername/Rentars.git`
+3. Install dependencies: `yarn install`
 
-## Setup
+## Development Setup
 
-```bash
-git clone https://github.com/your-org/rentars.git
-cd rentars
-yarn install
-```
-
-## Turborepo
-
-Rentars uses [Turborepo](https://turbo.build) for monorepo task orchestration. Turbo caches task outputs and runs tasks in parallel, dramatically speeding up local development and CI.
-
-### Common commands
-
-| Command | Description |
-|---|---|
-| `yarn dev` | Start all apps in dev mode (parallel) |
-| `yarn build` | Build all apps (respects dependency order) |
-| `yarn test` | Run all test suites |
-| `yarn lint` | Lint all packages |
-
-### How the pipeline works
-
-The pipeline is defined in `turbo.json`:
-
-- **`build`** — depends on upstream `build` (e.g. shared packages build first). Outputs are cached in `.next/` and `dist/`.
-- **`test`** — depends on `build` so tests always run against fresh build artefacts.
-- **`lint`** — no dependencies, runs in parallel across all packages.
-- **`dev`** — persistent, never cached.
-
-### Running a single package
+### Backend
 
 ```bash
-# Build only the backend
-yarn turbo run build --filter=rentars-backend
-
-# Test only the web app
-yarn turbo run test --filter=web
+cd apps/backend
+cp .env.example .env.local
+# Edit .env.local with your configuration
+yarn dev
 ```
 
-### Remote caching (optional)
-
-Turbo supports remote caching via Vercel to share build caches across machines and CI runs:
+### Frontend
 
 ```bash
-npx turbo login
-npx turbo link
+cd apps/web
+cp .env.example .env.local
+# Edit .env.local with your configuration
+yarn dev
 ```
 
-Once linked, set `TURBO_TOKEN` and `TURBO_TEAM` as CI secrets to enable remote cache hits.
+### Full Stack with Docker
 
-## Conventional Commits
-
-Use [Conventional Commits](https://www.conventionalcommits.org):
-
-```
-feat: add wishlist endpoint
-fix: correct notification unread count
-chore: update turbo pipeline
+```bash
+docker-compose up -d
 ```
 
-## Pull Requests
+## Code Quality
 
-1. Branch off `main`: `git checkout -b feat/your-feature`
-2. Implement your changes
-3. Run `yarn build && yarn test` before opening a PR
-4. Reference the issue in your PR description: `closes #123`
+- We use Biome for linting and formatting
+- Run before committing: `yarn format-and-lint`
+- Pre-commit hooks will run automatically via Husky
+
+## Testing
+
+```bash
+# Unit tests
+yarn test:unit
+
+# Integration tests
+yarn test:integration
+```
+
+## Release Process
+
+We use Changesets for versioning and changelog management.
+
+### Creating a Release
+
+1. Make changes and commit them
+2. Run `yarn changeset` to create a changeset file
+3. Commit the changeset file
+4. Push to main branch
+5. GitHub Actions will automatically:
+   - Version the package
+   - Update CHANGELOG.md
+   - Publish to npm (if applicable)
+
+### Version Bump Types
+
+- `patch`: Bug fixes
+- `minor`: New features
+- `major`: Breaking changes
+
+## Commit Messages
+
+Follow Conventional Commits:
+
+- `feat: add new feature`
+- `fix: resolve bug`
+- `docs: update documentation`
+- `refactor: restructure code`
+- `test: add tests`
+
+## Questions?
+
+Open an issue for discussion before submitting a PR.

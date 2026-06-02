@@ -1,0 +1,41 @@
+name: Storybook
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/web/src/**'
+      - 'apps/web/.storybook/**'
+      - '.github/workflows/storybook.yml'
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Storybook
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build Storybook
+        run: yarn workspace web build-storybook
+        env:
+          NODE_OPTIONS: '--max_old_space_size=4096'
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: apps/web/storybook-static
+          destination_dir: storybook

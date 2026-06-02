@@ -7,9 +7,7 @@ import authRoutes from './routes/auth.routes';
 import bookingRoutes from './routes/booking.routes';
 import propertyRoutes from './routes/property.routes';
 import locationRoutes from './routes/location.routes';
-import reviewRoutes from './routes/review.routes';
-import wishlistRoutes from './routes/wishlist.routes';
-import notificationRoutes from './routes/notification.routes';
+import { setupOpenApiRoutes } from './config/swagger';
 
 dotenv.config();
 
@@ -40,6 +38,9 @@ app.use('/api/notifications', notificationRoutes);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'Rentars API 🚀' });
 });
+
+// OpenAPI docs
+setupOpenApiRoutes(app);
 
 app.use(errorMiddleware);
 

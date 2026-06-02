@@ -1,8 +1,4 @@
-'use client';
-
-import { Heart } from 'lucide-react';
-import { useWishlist } from '@/hooks/useWishlist';
-import type { Property } from '../../types/property';
+import type { Property } from '@/types/property';
 
 interface PropertyCardProps {
   property: Property;

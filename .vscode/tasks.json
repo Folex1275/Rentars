@@ -1,0 +1,42 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Dev: Backend",
+      "type": "shell",
+      "command": "bun run dev",
+      "options": { "cwd": "${workspaceFolder}/apps/backend" },
+      "group": "build",
+      "isBackground": true
+    },
+    {
+      "label": "Dev: Frontend",
+      "type": "shell",
+      "command": "yarn dev",
+      "options": { "cwd": "${workspaceFolder}/apps/web" },
+      "group": "build",
+      "isBackground": true
+    },
+    {
+      "label": "Test: Frontend",
+      "type": "shell",
+      "command": "yarn test",
+      "options": { "cwd": "${workspaceFolder}/apps/web" },
+      "group": "test"
+    },
+    {
+      "label": "Test: Backend",
+      "type": "shell",
+      "command": "bun test",
+      "options": { "cwd": "${workspaceFolder}/apps/backend" },
+      "group": "test"
+    },
+    {
+      "label": "Build: Contracts",
+      "type": "shell",
+      "command": "cargo build --target wasm32-unknown-unknown --release",
+      "options": { "cwd": "${workspaceFolder}/apps/contracts" },
+      "group": "build"
+    }
+  ]
+}

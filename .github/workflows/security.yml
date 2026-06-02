@@ -1,0 +1,63 @@
+name: Security Scan
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 0 * * 0'
+
+jobs:
+  security-scan:
+    name: Security scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run npm audit — backend
+        run: |
+          cd apps/backend
+          npm audit --audit-level=moderate
+
+      - name: Run npm audit — frontend
+        run: |
+          cd apps/web
+          npm audit --audit-level=moderate
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked --force
+
+      - name: Run cargo audit
+        working-directory: apps/contracts
+        run: cargo audit
+
+      - name: Run secret scan with Gitleaks
+        uses: zricethezav/gitleaks-action@v4
+        with:
+          args: --path . --redact
+
+      - name: Run OSSF Scorecard
+        uses: ossf/scorecard-action@v4
+        with:
+          path: .
+          output: scorecard.sarif
+          format: sarif
+          show-details: true

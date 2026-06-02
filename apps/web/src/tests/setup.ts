@@ -48,6 +48,22 @@ vi.mock('@stellar/freighter-api', () => ({
   getPublicKey: vi.fn(() => Promise.resolve('GTEST')),
 }));
 
+// Mock react-hook-form
+vi.mock('react-hook-form', async () => {
+  const actual = await vi.importActual('react-hook-form');
+  return {
+    ...actual,
+    useForm: () => ({
+      register: vi.fn((name) => ({ name })),
+      handleSubmit: vi.fn((fn) => (e) => {
+        e.preventDefault();
+        fn({});
+      }),
+      formState: { errors: {} },
+    }),
+  };
+});
+
 // Mock environment variables
 process.env.NEXT_PUBLIC_API_URL = 'http://localhost:3000';
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co';
