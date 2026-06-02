@@ -48,7 +48,7 @@ jobs:
 
       - name: Post preview URL on pull request
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PREVIEW_URL: ${{ steps.vercel.outputs.preview-url }}
         with:
