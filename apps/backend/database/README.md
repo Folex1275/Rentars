@@ -1,176 +1,293 @@
-# Rentars Database Schema Documentation
+# Rentars Database Schema
 
 ## Overview
 
-The Rentars database is built on PostgreSQL and manages all core entities for the peer-to-peer rental platform on Stellar blockchain.
+Rentars uses PostgreSQL for identity, listings, bookings, availability, wallet authentication, blockchain audit logs, and sync tracking.
+
+## Entity relationship diagram
+
+```mermaid
+erDiagram
+  users ||--o{ properties : owns
+  users ||--o{ bookings : books
+  properties ||--o{ bookings : receives
+  properties ||--o{ availability_ranges : has
+  users ||--o| profiles : has
+
+  users {
+    uuid id PK
+    varchar email UNIQUE NOT NULL
+    varchar password_hash
+    varchar stellar_address
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  profiles {
+    uuid id PK
+    uuid user_id UNIQUE FK
+    varchar stellar_address
+    varchar display_name
+    varchar avatar_url
+    text bio
+    varchar phone
+    boolean verified
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  properties {
+    uuid id PK
+    uuid owner_id FK
+    varchar title NOT NULL
+    text description
+    varchar location
+    decimal price_per_night NOT NULL
+    int max_guests
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  bookings {
+    uuid id PK
+    uuid property_id FK
+    uuid tenant_id FK
+    date check_in NOT NULL
+    date check_out NOT NULL
+    decimal total_price NOT NULL
+    varchar status
+    varchar escrow_id
+    varchar blockchain_booking_id
+    varchar blockchain_status
+    timestamp created_at
+    timestamp updated_at
+  }
+```
 
 ## Tables
 
 ### users
-Core user authentication and identity table.
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique user identifier |
-| email | VARCHAR(255) | UNIQUE, NOT NULL | User email address |
-| password_hash | VARCHAR(255) | | Hashed password (bcrypt) |
-| stellar_address | VARCHAR(56) | | Stellar wallet address for blockchain operations |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Account creation time |
-| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update time |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | User identifier |
+| email | VARCHAR(255) | UNIQUE, NOT NULL | Login email |
+| password_hash | VARCHAR(255) | Nullable | Password hash |
+| stellar_address | VARCHAR(56) | Nullable | Linked Stellar wallet address |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update timestamp |
 
-### profiles
-Extended user profile information.
-
-| Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique profile identifier |
-| user_id | UUID | UNIQUE, FK users(id) | Reference to user |
-| stellar_address | VARCHAR(56) | | Stellar address (denormalized) |
-| display_name | VARCHAR(255) | | User's display name |
-| avatar_url | VARCHAR(255) | | Profile picture URL |
-| bio | TEXT | | User biography |
-| phone | VARCHAR(20) | | Contact phone number |
-| verified | BOOLEAN | DEFAULT FALSE | KYC verification status |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Profile creation time |
-| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update time |
+Indexes:
+- `idx_users_stellar_address (stellar_address)`
 
 ### properties
-Rental property listings.
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique property identifier |
-| owner_id | UUID | FK users(id) | Property owner |
-| title | VARCHAR(255) | NOT NULL | Property name |
-| description | TEXT | | Detailed description |
-| location | VARCHAR(255) | | Property location |
-| price_per_night | DECIMAL(10,2) | NOT NULL, > 0 | Nightly rental rate in USDC |
-| max_guests | INT | DEFAULT 1 | Maximum occupancy |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Listing creation time |
-| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update time |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Property identifier |
+| owner_id | UUID | NOT NULL, FK users(id), ON DELETE CASCADE | Property owner |
+| title | VARCHAR(255) | NOT NULL | Property title |
+| description | TEXT | Nullable | Property description |
+| location | VARCHAR(255) | Nullable | Property location |
+| price_per_night | DECIMAL(10,2) | NOT NULL, CHECK > 0 | Nightly price |
+| max_guests | INT | DEFAULT 1 | Maximum guests |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update timestamp |
+
+Indexes:
+- `idx_properties_owner_id (owner_id)`
 
 ### bookings
-Rental booking records with blockchain integration.
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique booking identifier |
-| property_id | UUID | FK properties(id) | Booked property |
-| tenant_id | UUID | FK users(id) | Booking tenant |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Booking identifier |
+| property_id | UUID | NOT NULL, FK properties(id), ON DELETE CASCADE | Referenced property |
+| tenant_id | UUID | NOT NULL, FK users(id), ON DELETE CASCADE | Tenant user |
 | check_in | DATE | NOT NULL | Check-in date |
-| check_out | DATE | NOT NULL, > check_in | Check-out date |
-| total_price | DECIMAL(10,2) | NOT NULL, > 0 | Total booking cost in USDC |
-| status | VARCHAR(50) | DEFAULT 'pending' | Booking status (pending, confirmed, completed, cancelled) |
-| escrow_id | VARCHAR(255) | | Soroban escrow contract ID |
-| blockchain_booking_id | VARCHAR(255) | | On-chain booking identifier |
-| blockchain_status | VARCHAR(50) | | On-chain status (active, released, disputed) |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Booking creation time |
-| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update time |
+| check_out | DATE | NOT NULL, CHECK > check_in | Check-out date |
+| total_price | DECIMAL(10,2) | NOT NULL, CHECK > 0 | Total booking price |
+| status | VARCHAR(50) | DEFAULT 'pending' | Booking status |
+| escrow_id | VARCHAR(255) | Nullable | Escrow contract identifier |
+| blockchain_booking_id | VARCHAR(255) | Nullable | On-chain booking identifier |
+| blockchain_status | VARCHAR(50) | Nullable | On-chain status |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update timestamp |
+
+Indexes:
+- `idx_bookings_property_id (property_id)`
+- `idx_bookings_tenant_id (tenant_id)`
+- `idx_bookings_escrow_id (escrow_id)`
+- `idx_bookings_blockchain_booking_id (blockchain_booking_id)`
 
 ### availability_ranges
-Property availability calendar.
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique range identifier |
-| property_id | UUID | FK properties(id) | Associated property |
-| start_date | DATE | NOT NULL | Range start date |
-| end_date | DATE | NOT NULL | Range end date |
-| is_available | BOOLEAN | DEFAULT TRUE | Availability flag |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation time |
-| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update time |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Availability identifier |
+| property_id | UUID | NOT NULL, FK properties(id), ON DELETE CASCADE | Referenced property |
+| start_date | DATE | NOT NULL | Availability start date |
+| end_date | DATE | NOT NULL | Availability end date |
+| is_available | BOOLEAN | DEFAULT TRUE | Availability state |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update timestamp |
 
-### wallet_challenges
-Stellar wallet authentication challenges.
+Indexes:
+- `idx_availability_ranges_property_id (property_id)`
+
+### profiles
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique challenge identifier |
-| stellar_address | VARCHAR(56) | NOT NULL | Stellar address being authenticated |
-| challenge | VARCHAR(255) | UNIQUE, NOT NULL | Random challenge string |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Challenge creation time |
-| expires_at | TIMESTAMP | DEFAULT +10 minutes | Challenge expiration time |
-| used | BOOLEAN | DEFAULT FALSE | Whether challenge was used |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Profile identifier |
+| user_id | UUID | NOT NULL, UNIQUE, FK users(id), ON DELETE CASCADE | Referenced user |
+| stellar_address | VARCHAR(56) | Nullable | Linked Stellar wallet address |
+| display_name | VARCHAR(255) | Nullable | Display name |
+| avatar_url | VARCHAR(255) | Nullable | Avatar URL |
+| bio | TEXT | Nullable | Bio |
+| phone | VARCHAR(20) | Nullable | Phone number |
+| verified | BOOLEAN | DEFAULT FALSE | Verification flag |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last update timestamp |
+
+Indexes:
+- `idx_profiles_user_id (user_id)`
+- `idx_profiles_stellar_address (stellar_address)`
 
 ### blockchain_logs
-Audit trail for all blockchain operations.
 
 | Column | Type | Constraints | Description |
-|--------|------|-----------|-------------|
-| id | UUID | PRIMARY KEY | Unique log entry identifier |
-| operation | VARCHAR(100) | NOT NULL | Operation type (e.g., 'create_escrow', 'release_escrow') |
-| input_json | JSONB | | Operation input parameters |
-| result_json | JSONB | | Operation result/response |
-| error_message | TEXT | | Error details if operation failed |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Log entry creation time |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Log identifier |
+| operation | VARCHAR(100) | NOT NULL | Blockchain operation name |
+| input_json | JSONB | Nullable | Operation input payload |
+| result_json | JSONB | Nullable | Operation output payload |
+| error_message | TEXT | Nullable | Error details |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Log timestamp |
 
-## Indexes
+Indexes:
+- `idx_blockchain_logs_operation (operation)`
+- `idx_blockchain_logs_created_at (created_at)`
 
-Performance indexes are created on frequently queried columns:
+### wallet_challenges
 
-- `idx_properties_owner_id` - Query properties by owner
-- `idx_bookings_property_id` - Query bookings by property
-- `idx_bookings_tenant_id` - Query bookings by tenant
-- `idx_bookings_escrow_id` - Query bookings by escrow
-- `idx_bookings_blockchain_booking_id` - Query bookings by blockchain ID
-- `idx_availability_ranges_property_id` - Query availability by property
-- `idx_wallet_challenges_stellar_address` - Query challenges by address
-- `idx_wallet_challenges_challenge` - Query challenges by challenge string
-- `idx_profiles_user_id` - Query profile by user
-- `idx_profiles_stellar_address` - Query profile by Stellar address
-- `idx_users_stellar_address` - Query user by Stellar address
-- `idx_blockchain_logs_operation` - Query logs by operation type
-- `idx_blockchain_logs_created_at` - Query logs by timestamp
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Challenge identifier |
+| stellar_address | VARCHAR(56) | NOT NULL | Wallet address being verified |
+| challenge | VARCHAR(255) | NOT NULL, UNIQUE | Challenge text |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Creation timestamp |
+| expires_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP + INTERVAL '10 minutes' | Expiration timestamp |
+| used | BOOLEAN | DEFAULT FALSE | Usage flag |
 
-## Functions
+Indexes:
+- `idx_wallet_challenges_stellar_address (stellar_address)`
+- `idx_wallet_challenges_challenge (challenge)`
 
-### update_updated_at_column()
-Automatically updates the `updated_at` timestamp on row modifications. Triggered on all main tables.
+### sync_log
 
-### create_booking_atomic(property_id, tenant_id, check_in, check_out, total_price)
-Atomically creates a booking with overlap detection. Returns booking UUID.
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| id | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Sync entry identifier |
+| entity_type | TEXT | NOT NULL, CHECK IN ('property','booking') | Synced entity kind |
+| entity_id | TEXT | NOT NULL | Synced entity identifier |
+| status | TEXT | NOT NULL, CHECK IN ('success','failed','skipped') | Sync result |
+| error_message | TEXT | Nullable | Failure details |
+| synced_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Sync execution timestamp |
+| created_at | TIMESTAMPTZ | NOT NULL, DEFAULT NOW() | Entry creation timestamp |
 
-**Validations:**
-- Checks for overlapping bookings on the same property
-- Raises exception if overlap detected
+Indexes:
+- `idx_sync_log_entity (entity_type, entity_id, synced_at DESC)`
+- `idx_sync_log_status (status, synced_at DESC)`
 
-### confirm_booking_atomic(booking_id, escrow_id, blockchain_booking_id)
-Atomically confirms a booking and links blockchain data. Returns boolean.
+## Row level security policies
 
-**Updates:**
-- Sets status to 'confirmed'
-- Links escrow and blockchain IDs
-- Sets blockchain_status to 'active'
+RLS is enabled on:
+- `profiles`
+- `properties`
+- `bookings`
 
-## Constraints
+### profiles
+- `Users can read their own profile` (SELECT): `auth.uid() = id`
+- `Users can update their own profile` (UPDATE): `auth.uid() = id`
+- `Users can insert their own profile` (INSERT): `auth.uid() = id`
 
-- `check_price_positive` - Property price_per_night > 0
-- `check_total_price_positive` - Booking total_price > 0
-- `check_dates_valid` - Booking check_out > check_in
+### properties
+- `Owners can insert properties` (INSERT): `auth.uid() = owner_id`
+- `Owners can update their own properties` (UPDATE): `auth.uid() = owner_id`
+- `Owners can delete their own properties` (DELETE): `auth.uid() = owner_id`
+- `All authenticated users can read properties` (SELECT): `auth.role() = 'authenticated'`
 
-## Migration Order
+### bookings
+- `Tenants can read their own bookings` (SELECT): `auth.uid() = tenant_id`
+- `Owners can read bookings for their properties` (SELECT): property owner lookup through `properties`
+- `System can insert bookings` (INSERT): `WITH CHECK (true)`
+- `Tenants can update their own bookings` (UPDATE): `auth.uid() = tenant_id`
+- `Tenants can delete their own bookings` (DELETE): `auth.uid() = tenant_id`
 
-Migrations are applied in sequence:
+## Triggers and PostgreSQL functions
 
-1. `00001_initial_schema.sql` - Core tables
-2. `00002_add_booking_blockchain_fields.sql` - Blockchain fields
-3. `00003_triggers.sql` - Auto-update triggers
-4. `00004_create_wallet_auth_tables.sql` - Wallet authentication
-5. `00005_create_profile_table.sql` - User profiles
-6. `00006_add_atomic_functions.sql` - Atomic operations
-7. `00007_add_payment_constraints.sql` - Payment validation
-8. `00008_create_blockchain_logs.sql` - Audit logging
+### Functions
+- `update_updated_at_column()`: sets `NEW.updated_at = CURRENT_TIMESTAMP` before row updates
+- `create_booking_atomic(p_property_id, p_tenant_id, p_check_in, p_check_out, p_total_price)`: inserts booking after overlap validation
+- `confirm_booking_atomic(p_booking_id, p_escrow_id, p_blockchain_booking_id)`: confirms booking and stores blockchain references
 
-## Running Migrations
+### Triggers
+- `update_users_updated_at` on `users`
+- `update_properties_updated_at` on `properties`
+- `update_bookings_updated_at` on `bookings`
+- `update_availability_ranges_updated_at` on `availability_ranges`
 
-To initialize the database:
+All triggers execute `update_updated_at_column()` `BEFORE UPDATE` for each row.
+
+## Migrations
+
+### Run all backend migrations
+
+From `apps/backend/database`:
 
 ```bash
-psql -U postgres -d rentars -f apps/backend/database/setup.sql
+psql -U postgres -d rentars -f setup.sql
 ```
 
-Or run individual migrations:
+`setup.sql` applies:
+1. `00001_initial_schema.sql`
+2. `00002_add_booking_blockchain_fields.sql`
+3. `00003_triggers.sql`
+4. `00004_create_wallet_auth_tables.sql`
+5. `00005_create_profile_table.sql`
+6. `00006_add_atomic_functions.sql`
+7. `00007_add_payment_constraints.sql`
+8. `00008_create_blockchain_logs.sql`
+
+### Additional migrations in repository
+
+Run manually as needed:
 
 ```bash
-psql -U postgres -d rentars -f apps/backend/database/migrations/00001_initial_schema.sql
+psql -U postgres -d rentars -f apps/backend/database/migrations/00009_create_reviews_table.sql
+psql -U postgres -d rentars -f apps/backend/database/migrations/00010_create_wishlists_table.sql
+psql -U postgres -d rentars -f apps/backend/database/migrations/00011_create_notifications_table.sql
+psql -U postgres -d rentars -f database/migrations/001_create_sync_tables.sql
+```
+
+### Rollback strategy
+
+No down-migration files are currently committed. Rollback can be handled by restoring from backup or running manual `DROP` statements in reverse dependency order.
+
+Manual rollback example:
+
+```bash
+psql -U postgres -d rentars <<'SQL'
+BEGIN;
+DROP TABLE IF EXISTS sync_log;
+DROP TABLE IF EXISTS wallet_challenges;
+DROP TABLE IF EXISTS blockchain_logs;
+DROP TABLE IF EXISTS availability_ranges;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS properties;
+DROP TABLE IF EXISTS profiles;
+DROP TABLE IF EXISTS users;
+COMMIT;
+SQL
 ```
