@@ -131,6 +131,49 @@ export async function removePropertyImage(
 }
 
 /**
+ * Reorder images for a property by providing a full ordered list of image IDs.
+ * Updates display_order for each image to match the given array index.
+ *
+ * @param propertyId - UUID of the property
+ * @param ownerId - UUID of the requesting user
+ * @param orderedIds - Image IDs in the new desired order
+ */
+export async function reorderPropertyImages(
+  propertyId: string,
+  ownerId: string,
+  orderedIds: string[],
+): Promise<ServiceResponse<PropertyImage[]>> {
+  const { data: property } = await supabase
+    .from('properties')
+    .select('owner_id')
+    .eq('id', propertyId)
+    .single();
+
+  if (!property || (property as { owner_id: string }).owner_id !== ownerId) {
+    return { success: false, error: 'Forbidden: you do not own this property' };
+  }
+
+  const updates = orderedIds.map((id, index) =>
+    supabase
+      .from('property_images')
+      .update({ display_order: index + 1 })
+      .eq('id', id)
+      .eq('property_id', propertyId),
+  );
+
+  await Promise.all(updates);
+
+  const { data, error } = await supabase
+    .from('property_images')
+    .select('*')
+    .eq('property_id', propertyId)
+    .order('display_order', { ascending: true });
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, data: data as PropertyImage[] };
+}
+
+/**
  * Set an image as the primary image for a property.
  *
  * @param propertyId - UUID of the property

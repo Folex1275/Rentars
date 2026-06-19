@@ -10,8 +10,10 @@ import {
   uploadImage,
   listImages,
   deleteImage,
+  reorderImages,
   setAsPrimary,
 } from '@/controllers/propertyImage.controller.js';
+import { searchPropertiesEndpoint } from '@/controllers/propertySearch.controller.js';
 import {
   getAvailability,
   addAvailabilityBlock,
@@ -53,6 +55,9 @@ router.delete('/:id/images/:imageId', authenticate, deleteImage);
 
 // PATCH /api/v1/properties/:id/images/:imageId/primary
 router.patch('/:id/images/:imageId/primary', authenticate, setAsPrimary);
+
+// PUT /api/v1/properties/:id/images/reorder
+router.put('/:id/images/reorder', authenticate, reorderImages);
 
 // ── Availability management ────────────────────────────────────────────────────
 
