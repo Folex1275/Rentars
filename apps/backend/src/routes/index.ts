@@ -3,6 +3,7 @@ import { supabase } from '@/config/supabase.js';
 import authRoutes from './auth.routes.js';
 import bookingRoutes from './booking.routes.js';
 import propertyRoutes from './property.routes.js';
+import calendarRoutes from './calendar.routes.js';
 
 const router = Router();
 
@@ -74,6 +75,7 @@ const apiV1 = Router();
 apiV1.use('/auth', authRoutes);
 apiV1.use('/bookings', bookingRoutes);
 apiV1.use('/properties', propertyRoutes);
+apiV1.use('/calendar', calendarRoutes);
 
 router.use('/api/v1', apiV1);
 
