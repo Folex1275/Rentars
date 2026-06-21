@@ -1,3 +1,9 @@
+import {
+  fundEscrowOnChain,
+  disputeBookingOnChain,
+  resolveDisputeOnChain,
+  getBookingWithEscrow,
+} from './bookingContract.js';
 import { EscrowError } from './errors.js';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -153,15 +159,9 @@ export class TrustlessWorkClient {
    * Create an escrow from structured booking parameters, setting a
    * human-readable title and relevant metadata automatically.
    *
-   * @param params - Booking-specific parameters (propertyId, bookingId, buyer/seller addresses, amount, dates)
+   * @param params - Booking-specific parameters
    * @returns CreateEscrowResponse containing escrowId, contractId, and status
    * @throws EscrowError on non-2xx API responses
-   * @example
-   * const resp = await trustlessWorkClient.createBookingEscrow({
-   *   propertyId: 'prop-1', bookingId: 'book-1',
-   *   buyerAddress: 'G...', sellerAddress: 'G...',
-   *   amountUsdc: '100', checkIn: '2025-07-01', checkOut: '2025-07-07',
-   * });
    */
   async createBookingEscrow(params: BookingEscrowParams): Promise<CreateEscrowResponse> {
     return this.createEscrow({
@@ -178,6 +178,69 @@ export class TrustlessWorkClient {
         checkOut: params.checkOut,
       },
     });
+  }
+
+  // ─── Soroban Escrow Integration ──────────────────────────────────────────────
+
+  /**
+   * Fund an on-chain escrow via the Soroban booking contract.
+   * Tenants call this to deposit USDC into the contract.
+   *
+   * @param tenant - Stellar address of the tenant (must authorize).
+   * @param bookingId - On-chain u64 booking ID.
+   */
+  async fundOnChainEscrow(tenant: string, bookingId: bigint): Promise<void> {
+    await fundEscrowOnChain(tenant, bookingId);
+  }
+
+  /**
+   * Dispute a funded booking on-chain. Only the tenant may dispute.
+   *
+   * @param tenant - Stellar address of the tenant (must authorize).
+   * @param bookingId - On-chain u64 booking ID.
+   */
+  async disputeBookingOnChain(tenant: string, bookingId: bigint): Promise<void> {
+    await disputeBookingOnChain(tenant, bookingId);
+  }
+
+  /**
+   * Resolve a disputed booking on-chain. Admin decides the outcome.
+   *
+   * @param admin - Stellar address of the admin caller.
+   * @param bookingId - On-chain u64 booking ID.
+   * @param releaseToOwner - true to release to owner, false to refund tenant.
+   */
+  async resolveDisputeOnChain(
+    admin: string,
+    bookingId: bigint,
+    releaseToOwner: boolean,
+  ): Promise<void> {
+    await resolveDisputeOnChain(admin, bookingId, releaseToOwner);
+  }
+
+  /**
+   * Get the on-chain escrow status for a booking.
+   *
+   * @param bookingId - On-chain u64 booking ID.
+   * @returns Object with status, owner, tenant, and price.
+   */
+  async getOnChainEscrowStatus(
+    bookingId: bigint,
+  ): Promise<{
+    status: string;
+    escrowStatus: string;
+    propertyOwner: string;
+    tenant: string;
+    amount: string;
+  }> {
+    const booking = await getBookingWithEscrow(bookingId);
+    return {
+      status: booking.status,
+      escrowStatus: booking.escrow_status,
+      propertyOwner: booking.property_owner,
+      tenant: booking.tenant,
+      amount: booking.total_price.toString(),
+    };
   }
 }
 

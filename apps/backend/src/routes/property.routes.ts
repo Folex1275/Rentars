@@ -5,14 +5,19 @@ import {
   getProperties,
   getProperty,
   updatePropertyHandler,
+  advancedSearchHandler,
+  searchSuggestionsHandler,
+  trendingSearchesHandler,
 } from '@/controllers/property.controller.js';
 import { searchPropertiesEndpoint } from '@/controllers/propertySearch.controller.js';
 import {
   uploadImage,
   listImages,
   deleteImage,
+  reorderImages,
   setAsPrimary,
 } from '@/controllers/propertyImage.controller.js';
+import { searchPropertiesEndpoint } from '@/controllers/propertySearch.controller.js';
 import {
   getAvailability,
   addAvailabilityBlock,
@@ -26,8 +31,14 @@ const router = Router();
 // GET /api/v1/properties
 router.get('/', getProperties);
 
-// GET /api/v1/properties/search?q=...
-router.get('/search', searchPropertiesEndpoint);
+// GET /api/v1/properties/search/advanced - Advanced search with filters
+router.get('/search/advanced', advancedSearchHandler);
+
+// GET /api/v1/properties/search/suggestions - Search suggestions
+router.get('/search/suggestions', searchSuggestionsHandler);
+
+// GET /api/v1/properties/search/trending - Trending searches
+router.get('/search/trending', trendingSearchesHandler);
 
 // GET /api/v1/properties/:id
 router.get('/:id', getProperty);
@@ -54,6 +65,9 @@ router.delete('/:id/images/:imageId', authenticate, deleteImage);
 
 // PATCH /api/v1/properties/:id/images/:imageId/primary
 router.patch('/:id/images/:imageId/primary', authenticate, setAsPrimary);
+
+// PUT /api/v1/properties/:id/images/reorder
+router.put('/:id/images/reorder', authenticate, reorderImages);
 
 // ── Availability management ────────────────────────────────────────────────────
 

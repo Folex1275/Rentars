@@ -25,7 +25,7 @@ import {
 } from './soroban.js';
 import { buildPrepareAndSign, extractReturnValue } from './transactionUtils.js';
 import { ContractError } from './errors.js';
-import type { BookingStatus } from './types.js';
+import type { BookingStatus, EscrowStatus } from './types.js';
 
 function requireContractId(): void {
   if (!BOOKING_CONTRACT_ID) {
@@ -175,4 +175,179 @@ export async function updateBookingStatusOnChain(
 
   const tx = await buildPrepareAndSign(server, [op]);
   await submitAndWait(server, tx);
+}
+
+// ─── Escrow Operations ─────────────────────────────────────────────────────────
+
+/**
+ * Set the USDC token contract address for on-chain escrow.
+ *
+ * @param tokenAddress - Address of the USDC Soroban token contract.
+ * @param callerAddress - Stellar address of the admin caller.
+ */
+export async function setTokenAddressOnChain(
+  tokenAddress: string,
+  callerAddress: string,
+): Promise<void> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const op = contract.call(
+    'set_token_address',
+    nativeToScVal(callerAddress, { type: 'address' }),
+    nativeToScVal(tokenAddress, { type: 'address' }),
+  );
+
+  const tx = await buildPrepareAndSign(server, [op]);
+  await submitAndWait(server, tx);
+}
+
+/**
+ * Fund the escrow for a booking by transferring USDC from the tenant to
+ * the contract. The tenant must authorize this transaction.
+ *
+ * @param tenant - Stellar address of the tenant (must authorize).
+ * @param bookingId - On-chain u64 booking ID.
+ */
+export async function fundEscrowOnChain(
+  tenant: string,
+  bookingId: bigint,
+): Promise<void> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const op = contract.call(
+    'fund_escrow',
+    nativeToScVal(tenant, { type: 'address' }),
+    nativeToScVal(bookingId, { type: 'u64' }),
+  );
+
+  const tx = await buildPrepareAndSign(server, [op]);
+  await submitAndWait(server, tx);
+}
+
+/**
+ * Dispute a funded booking. Only the tenant may start a dispute.
+ *
+ * @param tenant - Stellar address of the tenant (must authorize).
+ * @param bookingId - On-chain u64 booking ID.
+ */
+export async function disputeBookingOnChain(
+  tenant: string,
+  bookingId: bigint,
+): Promise<void> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const op = contract.call(
+    'dispute_booking',
+    nativeToScVal(tenant, { type: 'address' }),
+    nativeToScVal(bookingId, { type: 'u64' }),
+  );
+
+  const tx = await buildPrepareAndSign(server, [op]);
+  await submitAndWait(server, tx);
+}
+
+/**
+ * Resolve a disputed booking. Admin decides whether to release escrowed
+ * funds to the property owner (true) or refund the tenant (false).
+ *
+ * @param callerAddress - Stellar address of the admin caller.
+ * @param bookingId - On-chain u64 booking ID.
+ * @param releaseToOwner - true to release to owner, false to refund tenant.
+ */
+export async function resolveDisputeOnChain(
+  callerAddress: string,
+  bookingId: bigint,
+  releaseToOwner: boolean,
+): Promise<void> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const op = contract.call(
+    'resolve_dispute',
+    nativeToScVal(callerAddress, { type: 'address' }),
+    nativeToScVal(bookingId, { type: 'u64' }),
+    nativeToScVal(releaseToOwner, { type: 'bool' }),
+  );
+
+  const tx = await buildPrepareAndSign(server, [op]);
+  await submitAndWait(server, tx);
+}
+
+/**
+ * Get the configured USDC token contract address.
+ *
+ * @returns The token contract address.
+ */
+export async function getTokenAddressOnChain(): Promise<string> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const sourceAccount = await server.getAccount(STELLAR_SOURCE_ACCOUNT);
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: '100',
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call('get_token_address'))
+    .setTimeout(30)
+    .build();
+
+  const retval = await simulateReadOnly(server, tx, 'get_token_address');
+  return scValToNative(retval) as string;
+}
+
+/**
+ * Read the escrow status for a booking.
+ *
+ * @param bookingId - On-chain u64 booking ID.
+ * @returns The booking (including escrow_status field).
+ */
+export async function getBookingWithEscrow(bookingId: bigint): Promise<{
+  id: bigint;
+  status: BookingStatus;
+  escrow_status: EscrowStatus;
+  property_owner: string;
+  tenant: string;
+  total_price: bigint;
+}> {
+  requireContractId();
+
+  const server = getSorobanServer();
+  const contract = new Contract(BOOKING_CONTRACT_ID);
+
+  const sourceAccount = await server.getAccount(STELLAR_SOURCE_ACCOUNT);
+  const tx = new TransactionBuilder(sourceAccount, {
+    fee: '100',
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(
+      contract.call(
+        'get_booking',
+        nativeToScVal(bookingId, { type: 'u64' }),
+      ),
+    )
+    .setTimeout(30)
+    .build();
+
+  const retval = await simulateReadOnly(server, tx, 'get_booking');
+  return scValToNative(retval) as {
+    id: bigint;
+    status: BookingStatus;
+    escrow_status: EscrowStatus;
+    property_owner: string;
+    tenant: string;
+    total_price: bigint;
+  };
 }

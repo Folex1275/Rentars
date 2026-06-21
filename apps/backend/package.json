@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^15.1.0",
+    "sharp": "^0.33.5",
     "@supabase/supabase-js": "^2.39.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

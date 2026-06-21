@@ -6,7 +6,10 @@ import {
   getPropertyById,
   searchProperties,
   updateProperty,
+  advancedSearch,
+  type AdvancedSearchFilters,
 } from '@/services/property.service.js';
+import { trackSearch, getSearchSuggestions, getTrendingSearches } from '@/services/searchAnalytics.service.js';
 
 export async function getProperties(req: Request, res: Response): Promise<void> {
   // If any search filter query params are present, delegate to searchProperties
@@ -98,6 +101,70 @@ export async function deletePropertyHandler(req: Request, res: Response): Promis
   }
 
   res.status(204).send();
+}
+
+// ─── Advanced Search ──────────────────────────────────────────────────────────
+
+export async function advancedSearchHandler(req: Request, res: Response): Promise<void> {
+  const filters: AdvancedSearchFilters = {
+    query: req.query.q as string,
+    city: req.query.city as string,
+    country: req.query.country as string,
+    min_price: req.query.min_price ? Number(req.query.min_price) : undefined,
+    max_price: req.query.max_price ? Number(req.query.max_price) : undefined,
+    bedrooms: req.query.bedrooms ? Number(req.query.bedrooms) : undefined,
+    guests: req.query.guests ? Number(req.query.guests) : undefined,
+    amenities: req.query.amenities ? (Array.isArray(req.query.amenities) ? (req.query.amenities as string[]) : [req.query.amenities as string]) : undefined,
+    latitude: req.query.latitude ? Number(req.query.latitude) : undefined,
+    longitude: req.query.longitude ? Number(req.query.longitude) : undefined,
+    radius_km: req.query.radius_km ? Number(req.query.radius_km) : undefined,
+    checkIn: req.query.checkIn as string,
+    checkOut: req.query.checkOut as string,
+    sortBy: req.query.sortBy as any,
+    page: req.query.page ? Number(req.query.page) : 1,
+    limit: req.query.limit ? Number(req.query.limit) : 20,
+  };
+
+  const result = await advancedSearch(filters);
+
+  if (!result.success) {
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  // Track search analytics
+  await trackSearch(filters.query || '', result.data.length, undefined, filters);
+
+  res.json({
+    data: result.data,
+    count: result.data.length,
+    page: filters.page,
+  });
+}
+
+export async function searchSuggestionsHandler(req: Request, res: Response): Promise<void> {
+  const prefix = req.query.q as string;
+  const limit = req.query.limit ? Number(req.query.limit) : 10;
+
+  const result = await getSearchSuggestions(prefix, limit);
+
+  if (!result.success) {
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  res.json(result.data);
+}
+
+export async function trendingSearchesHandler(_req: Request, res: Response): Promise<void> {
+  const result = await getTrendingSearches(10);
+
+  if (!result.success) {
+    res.status(500).json({ error: result.error });
+    return;
+  }
+
+  res.json(result.data);
 }
 
 // ─── Availability ─────────────────────────────────────────────────────────────

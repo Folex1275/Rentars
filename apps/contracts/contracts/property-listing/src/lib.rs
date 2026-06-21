@@ -69,7 +69,7 @@ pub enum DataKey {
 #[contracttype]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u32)]
-pub enum Error {
+pub enum ContractError {
     NotFound = 1,
     Unauthorized = 2,
     AlreadyExists = 3,
