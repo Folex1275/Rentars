@@ -13,6 +13,7 @@ export interface Property {
   latitude: number;
   longitude: number;
   price_per_night: number;
+  distance_km?: number;
 }
 
 export class LocationService {

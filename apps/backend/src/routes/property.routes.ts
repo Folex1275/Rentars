@@ -5,6 +5,9 @@ import {
   getProperties,
   getProperty,
   updatePropertyHandler,
+  advancedSearchHandler,
+  searchSuggestionsHandler,
+  trendingSearchesHandler,
 } from '@/controllers/property.controller.js';
 import {
   uploadImage,
@@ -27,8 +30,14 @@ const router = Router();
 // GET /api/v1/properties
 router.get('/', getProperties);
 
-// GET /api/v1/properties/search?q=...
-router.get('/search', searchPropertiesEndpoint);
+// GET /api/v1/properties/search/advanced - Advanced search with filters
+router.get('/search/advanced', advancedSearchHandler);
+
+// GET /api/v1/properties/search/suggestions - Search suggestions
+router.get('/search/suggestions', searchSuggestionsHandler);
+
+// GET /api/v1/properties/search/trending - Trending searches
+router.get('/search/trending', trendingSearchesHandler);
 
 // GET /api/v1/properties/:id
 router.get('/:id', getProperty);
