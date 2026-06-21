@@ -1,77 +1,105 @@
-'use client';
-
 import { useState, useCallback, useEffect } from 'react';
-import { isFreighterInstalled, getFreighterPublicKey, signWithFreighter } from '@/lib/freighter-utils';
-import { getNetworkPassphrase } from '@/lib/network-utils';
+import {
+  connectFreighterWallet,
+  getWalletStatus,
+  isValidStellarAddress,
+  FreighterError,
+  WalletState,
+} from '@/lib/freighter-utils';
 
-interface UseWalletReturn {
+export interface UseWalletReturn {
+  state: WalletState & { isLoading: boolean };
   connect: () => Promise<void>;
   disconnect: () => void;
-  signTransaction: (xdr: string) => Promise<string>;
-  isConnected: boolean;
-  publicKey: string | null;
-  network: string;
-  isLoading: boolean;
-  error: string | null;
+  checkStatus: () => Promise<void>;
 }
 
-export function useWallet(network: 'testnet' | 'mainnet' = 'testnet'): UseWalletReturn {
-  const [isConnectedState, setIsConnected] = useState(false);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+/**
+ * Hook for managing Freighter wallet connection and status
+ */
+export function useWallet(): UseWalletReturn {
+  const [state, setState] = useState<WalletState & { isLoading: boolean }>({
+    isConnected: false,
+    address: null,
+    network: 'testnet',
+    isLoading: true,
+    error: null,
+  });
+
+  // Check for existing connection on mount
+  useEffect(() => {
+    checkStatus();
+  }, []);
+
+  const checkStatus = useCallback(async () => {
+    setState((prev) => ({ ...prev, isLoading: true }));
+    const status = await getWalletStatus();
+    setState((prev) => ({
+      ...status,
+      isLoading: false,
+    }));
+  }, []);
 
   const connect = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
     try {
-      const installed = await isFreighterInstalled();
-      if (!installed) {
-        throw new Error('Freighter wallet is not installed');
+      const address = await connectFreighterWallet();
+      localStorage.setItem('walletAddress', address);
+
+      setState({
+        isConnected: true,
+        address,
+        network: 'testnet',
+        isLoading: false,
+        error: null,
+      });
+    } catch (error) {
+      let errorMessage = 'Failed to connect wallet';
+
+      if (error instanceof FreighterError) {
+        switch (error.code) {
+          case 'NOT_INSTALLED':
+            errorMessage =
+              'Freighter wallet is not installed. Please install it from https://www.freighter.app';
+            break;
+          case 'NOT_CONNECTED':
+            errorMessage =
+              'Wallet is not connected in Freighter. Please open Freighter and connect your account.';
+            break;
+          case 'USER_REJECTED':
+            errorMessage = 'You rejected the connection request. Please try again.';
+            break;
+          default:
+            errorMessage = error.message;
+        }
       }
-      const key = await getFreighterPublicKey();
-      setPublicKey(key);
-      setIsConnected(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to connect wallet';
-      setError(message);
-      setIsConnected(false);
-    } finally {
-      setIsLoading(false);
+
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: errorMessage,
+      }));
+
+      throw error;
     }
   }, []);
 
   const disconnect = useCallback(() => {
-    setPublicKey(null);
-    setIsConnected(false);
-    setError(null);
+    localStorage.removeItem('walletAddress');
+    setState({
+      isConnected: false,
+      address: null,
+      network: 'testnet',
+      isLoading: false,
+      error: null,
+    });
   }, []);
 
-  const signTx = useCallback(
-    async (xdr: string): Promise<string> => {
-      if (!isConnectedState) {
-        throw new Error('Wallet not connected');
-      }
-      try {
-        const networkPassphrase = getNetworkPassphrase(network);
-        return await signWithFreighter(xdr, networkPassphrase);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to sign transaction';
-        setError(message);
-        throw err;
-      }
-    },
-    [isConnectedState, network]
-  );
-
   return {
+    state,
     connect,
     disconnect,
-    signTransaction: signTx,
-    isConnected: isConnectedState,
-    publicKey,
-    network,
-    isLoading,
-    error,
+    checkStatus,
   };
 }

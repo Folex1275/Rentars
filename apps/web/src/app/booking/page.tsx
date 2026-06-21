@@ -1,22 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import BookingForm from '@/components/booking/BookingForm';
 import WalletConnectionModal from '@/components/booking/WalletConnectionModal';
+import { isValidStellarAddress } from '@/lib/freighter-utils';
 
 export default function BookingPage() {
   const router = useRouter();
   const [walletConnected, setWalletConnected] = useState(false);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check for existing wallet connection on mount
+  useEffect(() => {
+    const savedAddress = localStorage.getItem('walletAddress');
+    if (savedAddress && isValidStellarAddress(savedAddress)) {
+      setWalletAddress(savedAddress);
+      setWalletConnected(true);
+    }
+  }, []);
 
   const handleBookingSubmit = async (data: {
     checkIn: Date;
     checkOut: Date;
     guestCount: number;
   }) => {
-    if (!walletConnected) {
+    if (!walletConnected || !walletAddress) {
       setShowWalletModal(true);
       return;
     }
@@ -37,6 +49,7 @@ export default function BookingPage() {
             check_in: data.checkIn.toISOString(),
             check_out: data.checkOut.toISOString(),
             guest_count: data.guestCount,
+            wallet_address: walletAddress,
           }),
         }
       );
@@ -56,8 +69,14 @@ export default function BookingPage() {
   };
 
   const handleWalletConnect = (address: string) => {
-    localStorage.setItem('walletAddress', address);
+    setWalletAddress(address);
     setWalletConnected(true);
+  };
+
+  const handleWalletDisconnect = () => {
+    localStorage.removeItem('walletAddress');
+    setWalletAddress(null);
+    setWalletConnected(false);
   };
 
   return (
@@ -68,18 +87,41 @@ export default function BookingPage() {
           Select your dates and connect your wallet to secure your reservation.
         </p>
 
+        {/* Wallet Status Card */}
+        <div className="mb-6">
+          {walletConnected && walletAddress ? (
+            <div className="flex items-start gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle2 size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-green-900">Wallet Connected</p>
+                <p className="text-xs text-green-700 mt-1 font-mono break-all">{walletAddress}</p>
+                <button
+                  onClick={handleWalletDisconnect}
+                  className="text-xs text-green-600 hover:text-green-700 mt-2 underline"
+                >
+                  Disconnect
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+              <AlertCircle size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-amber-900">Wallet Not Connected</p>
+                <p className="text-xs text-amber-700 mt-1">
+                  You'll need to connect your wallet to complete booking.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
         <BookingForm
           propertyId="property-id"
           pricePerNight={100}
           onSubmit={handleBookingSubmit}
           isLoading={isLoading}
         />
-
-        {walletConnected && (
-          <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-            ✓ Wallet connected
-          </div>
-        )}
       </div>
 
       <WalletConnectionModal
