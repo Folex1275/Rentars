@@ -21,6 +21,10 @@ import type {
   Booking,
   BookingStatus,
   CreateBookingParams,
+  DisputeBookingParams,
+  EscrowStatus,
+  FundEscrowParams,
+  ResolveDisputeParams,
 } from './types.js';
 
 // ─── ABI metadata (sourced from booking_abi.json) ────────────────────────────
@@ -181,6 +185,66 @@ export class BookingClient {
       nativeToScVal(caller, { type: 'address' }),
       nativeToScVal(bookingId, { type: 'u64' }),
       nativeToScVal(escrowId, { type: 'string' }),
+    );
+  }
+
+  /**
+   * Build the XDR operation for set_token_address.
+   *
+   * ABI: set_token_address(caller, token_address)
+   * Only the admin may call this.
+   */
+  buildSetTokenAddress(
+    caller: string,
+    tokenAddress: string,
+  ): xdr.Operation {
+    return this.contract.call(
+      'set_token_address',
+      nativeToScVal(caller, { type: 'address' }),
+      nativeToScVal(tokenAddress, { type: 'address' }),
+    );
+  }
+
+  /**
+   * Build the XDR operation for fund_escrow.
+   *
+   * ABI: fund_escrow(tenant, booking_id)
+   * The tenant must authorize and have sufficient USDC balance.
+   */
+  buildFundEscrow(params: FundEscrowParams): xdr.Operation {
+    return this.contract.call(
+      'fund_escrow',
+      nativeToScVal(params.tenant, { type: 'address' }),
+      nativeToScVal(params.booking_id, { type: 'u64' }),
+    );
+  }
+
+  /**
+   * Build the XDR operation for dispute_booking.
+   *
+   * ABI: dispute_booking(tenant, booking_id)
+   * Only the tenant may dispute a funded booking.
+   */
+  buildDisputeBooking(params: DisputeBookingParams): xdr.Operation {
+    return this.contract.call(
+      'dispute_booking',
+      nativeToScVal(params.tenant, { type: 'address' }),
+      nativeToScVal(params.booking_id, { type: 'u64' }),
+    );
+  }
+
+  /**
+   * Build the XDR operation for resolve_dispute.
+   *
+   * ABI: resolve_dispute(caller, booking_id, release_to_owner)
+   * Only the admin may resolve disputes.
+   */
+  buildResolveDispute(params: ResolveDisputeParams): xdr.Operation {
+    return this.contract.call(
+      'resolve_dispute',
+      nativeToScVal(params.caller, { type: 'address' }),
+      nativeToScVal(params.booking_id, { type: 'u64' }),
+      nativeToScVal(params.release_to_owner, { type: 'bool' }),
     );
   }
 

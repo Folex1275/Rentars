@@ -11,7 +11,7 @@
 
 // ─── Property Listing Types ───────────────────────────────────────────────────
 
-/** Mirrors BookingStatus enum in booking_abi.json */
+/** Mirrors ListingStatus enum in property_listing_abi.json */
 export type ListingStatus = 'Active' | 'Inactive' | 'Rented';
 
 /** Mirrors PropertyListing struct in property_listing_abi.json */
@@ -28,13 +28,26 @@ export interface PropertyListing {
 // ─── Booking Types ────────────────────────────────────────────────────────────
 
 /** Mirrors BookingStatus enum in booking_abi.json */
-export type BookingStatus = 'Pending' | 'Confirmed' | 'Cancelled' | 'Completed';
+export type BookingStatus =
+  | 'Pending'
+  | 'Confirmed'
+  | 'Cancelled'
+  | 'Completed'
+  | 'Disputed';
+
+/** Mirrors EscrowStatus enum in booking_abi.json */
+export type EscrowStatus =
+  | 'NotFunded'
+  | 'Funded'
+  | 'Released'
+  | 'Refunded';
 
 /** Mirrors Booking struct in booking_abi.json */
 export interface Booking {
   id: bigint;
   property_id: bigint;
   tenant: string; // Stellar address
+  property_owner: string; // Stellar address
   /** Unix timestamp (seconds) */
   check_in: bigint;
   /** Unix timestamp (seconds) */
@@ -44,6 +57,8 @@ export interface Booking {
   status: BookingStatus;
   /** Off-chain escrow reference. Empty string until set by admin. */
   escrow_id: string;
+  /** On-chain escrow status */
+  escrow_status: EscrowStatus;
 }
 
 // ─── Review Types ─────────────────────────────────────────────────────────────
@@ -94,4 +109,25 @@ export interface SubmitReviewParams {
   reviewee: string;
   rating: number;
   comment: string;
+}
+
+// ─── Escrow Types ─────────────────────────────────────────────────────────────
+
+/** Parameters for funding an escrow */
+export interface FundEscrowParams {
+  tenant: string;
+  booking_id: bigint;
+}
+
+/** Parameters for disputing a booking */
+export interface DisputeBookingParams {
+  tenant: string;
+  booking_id: bigint;
+}
+
+/** Parameters for resolving a dispute */
+export interface ResolveDisputeParams {
+  caller: string;
+  booking_id: bigint;
+  release_to_owner: boolean;
 }

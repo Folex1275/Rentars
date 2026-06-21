@@ -14,6 +14,12 @@ export {
   cancelBookingOnChain,
   updateBookingStatusOnChain,
   checkAvailability,
+  setTokenAddressOnChain,
+  fundEscrowOnChain,
+  disputeBookingOnChain,
+  resolveDisputeOnChain,
+  getTokenAddressOnChain,
+  getBookingWithEscrow,
 } from './bookingContract.js';
 
 export {
@@ -50,6 +56,7 @@ export {
 export type {
   Booking,
   BookingStatus,
+  EscrowStatus,
   CreateBookingParams,
   CreateListingParams,
   ListingStatus,
@@ -57,12 +64,15 @@ export type {
   Review,
   SubmitReviewParams,
   UpdateListingParams,
+  FundEscrowParams,
+  DisputeBookingParams,
+  ResolveDisputeParams,
 } from './types.js';
 
 export type {
   CreateEscrowRequest,
   CreateEscrowResponse,
-  EscrowStatus,
+  EscrowStatus as TrustlessWorkEscrowStatus,
   FundEscrowRequest,
   ReleaseEscrowRequest,
   BookingEscrowParams,
