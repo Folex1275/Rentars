@@ -12,4 +12,5 @@ export interface ServiceResponse<T = unknown> {
   data?: T;
   error?: string;
   warning?: string;
+  statusCode?: number;
 }

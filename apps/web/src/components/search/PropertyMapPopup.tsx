@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Popup } from 'react-leaflet';
 import type { Property } from '@/types/property';
 
@@ -10,17 +9,8 @@ export interface PropertyMapPopupProps {
 }
 
 export default function PropertyMapPopup({ property, onClick }: PropertyMapPopupProps) {
-  // Allow click to navigate while still using Leaflet popup.
-  const [open, setOpen] = useState(false);
-
   return (
-    <Popup
-      position={[(property as any).lat, (property as any).lng]}
-      onOpen={() => setOpen(true)}
-      onClose={() => setOpen(false)}
-      closeButton={false}
-      autoPan={false}
-    >
+    <Popup>
       <button
         onClick={(e) => {
           e.preventDefault();

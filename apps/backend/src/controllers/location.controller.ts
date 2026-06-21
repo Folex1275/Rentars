@@ -22,7 +22,24 @@ export async function searchNearby(req: Request, res: Response): Promise<void> {
   const result = await locationService.searchNearby(
     parseFloat(lat as string),
     parseFloat(lng as string),
-    parseFloat(radius as string),
+    parseFloat((radius as string) || '10'),
+  );
+
+  if (!result.success) {
+    res.status(result.statusCode || 400).json({ error: result.error });
+    return;
+  }
+
+  res.json(result.data);
+}
+
+export async function getPriceComparison(req: Request, res: Response): Promise<void> {
+  const { lat, lng, radius } = req.query;
+
+  const result = await locationService.getPriceComparison(
+    parseFloat(lat as string),
+    parseFloat(lng as string),
+    parseFloat((radius as string) || '10'),
   );
 
   if (!result.success) {
