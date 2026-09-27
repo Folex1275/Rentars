@@ -10,6 +10,8 @@ import type { AuthRequest } from '@/middleware/auth.middleware.js';
 import type { BookingModification } from '@/services/booking.service.js';
 import { lookup, store, lockKey, completeKey, releaseKey, hashRequestBody } from '@/services/idempotency.service.js';
 import { fetchReceiptData, generateReceiptPdf } from '@/services/receipt.service.js';
+import { bookingAuthorizationService } from '@/services/bookingAuthorization.service.js';
+import { loggingService } from '@/services/logging.service.js';
 
 function calendarFeedSecret(): string {
   return env.CALENDAR_FEED_SECRET ?? env.JWT_SECRET;
@@ -69,9 +71,21 @@ export async function listUserBookings(req: AuthRequest, res: Response): Promise
  * Body: { requested_start: string, requested_end: string, reason?: string }
  */
 export async function requestModification(req: Request, res: Response): Promise<void> {
-  const authUser = (req as Request & { user?: { id: string } }).user;
+  const authUser = (req as Request & { user?: { id: string; role?: string } }).user;
   if (!authUser) {
     res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Authorization check
+  const authCheck = await bookingAuthorizationService.canRequestModification(req.params.id, authUser.id, authUser.role);
+  if (!authCheck.allowed) {
+    loggingService.logSecurityEvent('modification_request_denied', {
+      bookingId: req.params.id,
+      userId: authUser.id,
+      reason: authCheck.reason,
+    });
+    res.status(403).json({ error: authCheck.reason ?? 'Forbidden' });
     return;
   }
 
@@ -111,9 +125,21 @@ export async function requestModification(req: Request, res: Response): Promise<
  * Only the host (property owner) may accept.
  */
 export async function acceptModification(req: Request, res: Response): Promise<void> {
-  const authUser = (req as Request & { user?: { id: string } }).user;
+  const authUser = (req as Request & { user?: { id: string; role?: string } }).user;
   if (!authUser) {
     res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Authorization check
+  const authCheck = await bookingAuthorizationService.canManageModification(req.params.id, authUser.id, authUser.role);
+  if (!authCheck.allowed) {
+    loggingService.logSecurityEvent('modification_accept_denied', {
+      bookingId: req.params.id,
+      userId: authUser.id,
+      reason: authCheck.reason,
+    });
+    res.status(403).json({ error: authCheck.reason ?? 'Forbidden' });
     return;
   }
 
@@ -139,9 +165,21 @@ export async function acceptModification(req: Request, res: Response): Promise<v
  * Only the host (property owner) may decline.
  */
 export async function declineModification(req: Request, res: Response): Promise<void> {
-  const authUser = (req as Request & { user?: { id: string } }).user;
+  const authUser = (req as Request & { user?: { id: string; role?: string } }).user;
   if (!authUser) {
     res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Authorization check
+  const authCheck = await bookingAuthorizationService.canManageModification(req.params.id, authUser.id, authUser.role);
+  if (!authCheck.allowed) {
+    loggingService.logSecurityEvent('modification_decline_denied', {
+      bookingId: req.params.id,
+      userId: authUser.id,
+      reason: authCheck.reason,
+    });
+    res.status(403).json({ error: authCheck.reason ?? 'Forbidden' });
     return;
   }
 
@@ -160,6 +198,25 @@ export async function declineModification(req: Request, res: Response): Promise<
 }
 
 export async function getBooking(req: Request, res: Response): Promise<void> {
+  const authUser = (req as Request & { user?: { id: string; role?: string } }).user;
+  
+  if (!authUser) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  // Check authorization before fetching
+  const authCheck = await bookingAuthorizationService.canRead(req.params.id, authUser.id, authUser.role);
+  if (!authCheck.allowed) {
+    loggingService.logSecurityEvent('booking_access_denied', {
+      bookingId: req.params.id,
+      userId: authUser.id,
+      reason: authCheck.reason,
+    });
+    res.status(403).json({ error: authCheck.reason ?? 'Forbidden' });
+    return;
+  }
+
   const result = await bookingService.getBookingById(req.params.id);
 
   if (!result.success) {
